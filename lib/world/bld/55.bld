@@ -2,7 +2,7 @@
 Helm~
 The Helm~
 ~
-0 0 amHI 0
+0 0 amHIRS 0
 0 0 0 -1
 C
 disembark, sail~
@@ -16,7 +16,7 @@ S
 On Deck~
 On Deck~
 ~
-0 0 amHI 0
+0 0 amHIRS 0
 0 0 0 -1
 C
 disembark, sail~
@@ -30,7 +30,7 @@ S
 Cargo Hold~
 In the Cargo Hold~
 ~
-0 0 amHI 0
+0 0 amHIRS 0
 0 0 0 -1
 C
 disembark, sail, unload~
@@ -44,7 +44,7 @@ S
 Below Deck~
 Below Deck~
 ~
-0 0 amHI 0
+0 0 amHIRS 0
 0 0 0 -1
 C
 disembark, sail, unload~
@@ -53,6 +53,18 @@ You are below deck of the ship, where the constant rocking makes you ill.
 ~
 M
 255 20.00 c
+S
+#5509
+Ship Holding Pen~
+The Ocean~
+&0[  ]~
+1 0 aejO 0
+0 0 0 -1
+D
+   You are sailing on the endless ocean, rippling in the wake of the ship. The
+water stretches from horizon to horizon, all the way around the ship. Any land
+is still too far away to see, banishing any hope of finding shore.
+~
 S
 #5510
 Secret Hideout~
@@ -74,7 +86,7 @@ S
 Top of the Tower~
 The Top of the Tower~
 ~
-0 0 a l
+0 0 aR l
 0 0 0 228
 C
 inventory, retrieve, store, study~

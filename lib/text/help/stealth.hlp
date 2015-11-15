@@ -31,9 +31,11 @@ Backstab (Stealth ability)
 
 Usage:  backstab [victim]
 Cooldown:  9 seconds
+Cost:  15 move
 
 A brave warrior looks his foe in the eye, but a clever assassin looks his
-target in the back as he strikes.
+target in the back as he strikes. You must wield a stabbing weapon to use this
+ability.
 
 Backstab deals 2x weapon damage on a successful attack, and the opponent has
 no chance to dodge if the attack succeeds. A particularly skilled assassin
@@ -45,8 +47,11 @@ Blind (Stealth ability)
 
 Usage:  blind [victim]
 Cooldown:  10 seconds
+Cost:  15 move
+Debuff type:  Stealth
 
-You toss sand in your opponents' eyes, blinding them for 10 seconds.
+You toss sand in your opponents' eyes, blinding them for 10 seconds. Being
+unable to see your foes inflicts a penalty of -50 to To-hit, Block and Dodge.
 
 If you're fighting, this will automatically target your opponent.
 #
@@ -75,16 +80,30 @@ using or holding.
 
 This ability gains skill points whenever they try.
 #
+"CRUCIAL JAB"
+
+Crucial Jab
+Class ability: Bandit
+Debuff type: Stealth
+
+Your Jab ability causes a debuff equal to your total level divided by 80 to
+your victim's Dexterity, for 10 seconds.
+
+See also: JAB
+#
 DARKNESS
 
 Darkness (Stealth ability)
 
 Usage:  darkness
 Cooldown:  15 seconds
+Cost:  15 move
 
 Master the power of shadow to blanket an area in darkness. It becomes much
-harder to see anything any at all, even where there should be daylight. This
+harder to see anything at all, even where there should be daylight. This
 ability also grants the ability to see in the darkness it creates.
+
+See also: BLIND
 #
 "DAGGER MASTERY"
 
@@ -101,13 +120,28 @@ Usage:  disguise <person>
 A savvy rogue learns to blend into his surroundings. With this ability, you can
 look like any human NPC. If you behave like one as well, you might find you
 disappear into the crowd.
+
+Morphing will remove disguises.
+#
+DIVERSION
+
+Diversion
+Class ability:  Smuggler
+Debuff type:  Stealth
+Cost:  50 move
+Cooldown:  30 seconds
+Usage:  diversion
+
+You create a flashy diversion, penalizing all enemies. The first victim loses
+Wits equal to your Charisma. Each additional victim loses Wits equal to half
+your Charisma (rounded up) instead. This effect lasts 15 seconds.
 #
 ESCAPE
 
 Escape (Stealth ability)
 
 Usage:  escape
-Cost:  10 mv
+Cost:  10 move
 Time:  5 seconds
 
 Escape lets you run for the nearest window and quickly exit the building or
@@ -123,7 +157,33 @@ When you type hide there is a chance that you hide in the room. If hidden you
 can't be seen by other people. Hide is broken by pressing return, regardless
 of whether you typed a command or not.
 
-See also: SEARCH, SNEAK
+See also: SEARCH, SNEAK, SENSE LIFE RITUAL
+#
+HOWL
+
+Howl
+Class ability:  Shadow Wolf
+Debuff type:  Stealth
+Cost:  50 move
+Cooldown:  30 seconds
+Usage:  howl
+
+You let out a terrifying howl, penalizing all enemies. The first victim loses
+to-hit equal to 4x your Charisma. Each additional victim loses to-hit equal to
+2x Charisma instead.
+#
+SHADOWCAGE "SHADOW CAGE"
+
+Shadowcage
+Class ability: Occultist
+Debuff type: Stealth
+Cost: 50 move
+Cooldown: 30 seconds
+Usage:  shadowcage
+
+You create a cage of shadows, penalizing all enemies. The first victim loses
+dodge equal to 4x your Charisma. Each additional victim loses dodge equal to 2x
+Charisma instead. This effect lasts 15 seconds.
 #
 INFILTRATE "IMPROVED INFILTRATE"
 
@@ -137,6 +197,9 @@ with. You must have stealth permission from your empire, and infiltrating will
 trigger distrust with the other empire. The empire will be alerted to your
 presence as an infiltrator, so act fast.
 
+Infiltrate will also allow you to enter portals in places that you don't have
+permission to use.
+
 Improved Infiltrate increases your chances of successful infiltration and
 give you a chance to get in undetected. Even if you are detected, your identity
 will not be revealed.
@@ -147,10 +210,15 @@ Jab (Stealth ability)
 
 Usage:  jab
 Cooldown:  9 seconds
+Cost:  15 move
 
 Jab your opponent while he's not looking and leave a wound in his side that
 will fester for 15 seconds, dealing additional damage. This ability stacks up
 to 2 times.
+
+This ability requires a stabbing weapon.
+
+See also: CRUCIAL JAB, SHADOW JAB, STAGGER JAB
 #
 PICKPOCKET "PICK POCKET"
 
@@ -163,6 +231,9 @@ A skilled thief can lift small items from an unsuspecting victim.
 You can only pickpocket NPCs, and even then only human ones. This ability does
 not remove items you see in their inventories, only "pocket items". The result
 is largely random. Each NPC can only be pickpocketed once.
+
+NPCs more than 50 levels above you will always catch you if you try to
+pickpocket them.
 #
 POISON POISONS "DEADLY POISONS" MIX
 
@@ -180,7 +251,8 @@ envenom them with your chosen poison. When the vial runs out of poison, it will
 be removed from your inventory.
 
 All vials have 15 charges. Deadly Poisons doubles the effects of most poisons.
-Poisons only work with sharp weapons.
+Poisons only work with sharp weapons. Poisons also count as Stealth debuffs,
+and some NPCs are immune.
 
 Basic Poisons:
   searing  +5 damage  (30 bileberries)
@@ -198,7 +270,7 @@ Deadly Poisons:
   slow  slower combat rate  (30 daggerbite, 15 redthorn)
   heartstop  vampires can't spend blood  (30 daggerbite, 15 redthorn)
 
-See also: MIX, RESIST POISON
+See also: CRAFTING LEVEL, RESIST POISON
 #
 PRICK
 
@@ -206,6 +278,7 @@ Prick (Stealth ability)
 
 Usage:  prick [target]
 Cooldown:  9 seconds
+Cost:  10 move
 
 This ability applies your poison quickly and subtly, and will work even if
 you're not in combat. If your target can't see you, it won't even start
@@ -219,8 +292,11 @@ Sap (Stealth ability)
 
 Usage:  sap <victim>
 Cooldown:  9 seconds
+Cost:  15 move
+Duration:  1 minute
+Debuff type:  Stealth, Stun
 
-This ability will temporarily stun your victim, giving you a moment collect
+This ability will temporarily stun your victim, giving you a moment to collect
 yourself before starting combat.
 
 Only one person in the room may be sapped at a time. Using the ability on a
@@ -245,12 +321,46 @@ See also: HIDE
 
 Resources:  20 lumber, 6 nails, 20 blocks, 5 imperium ingots
 Built on:  plains, desert
-Chameleon:  .... or &Y....&0
+Chameleon:  &g....&0 or &Y....&0
 
 This ability allows you to build the secret cache, a place to store your
 wealth that is more easily hidden than a vault.
 
 See also: BUILD, VAULT
+#
+"SHADOW JAB"
+
+Shadow Jab
+Class ability: Shade
+Debuff type: Stealth
+
+Your Jab ability causes a debuff equal to your Charisma divided by 5 (rounded
+up) to your victim's dodge, for 15 seconds. This effect may stack.
+
+See also: JAB
+#
+"SHADOW KICK"
+
+Shadow Kick
+Class ability:  Assassin
+Debuff type:  Battle
+
+Your Kick ability causes a penalty to physical and magical damage equal to
+your total level divided by 50 for 10 seconds.
+
+See also: KICK
+#
+SHADOWCAGE "SHADOW CAGE"
+
+Shadowcage
+Class ability: Occultist
+Debuff type: Stealth
+Cost: 50 move
+Cooldown: 30 seconds
+
+You create a cage of shadows, penalizing all enemies. The first victim loses
+dodge equal to 5x your Charisma. Each additional victim loses dodge equal to 3x
+Charisma instead. This effect lasts 15 seconds.
 #
 SHADOWSTEP "SHADOW STEP"
 
@@ -258,11 +368,15 @@ Shadowstep (Stealth ability)
 
 Usage:  shadowstep <target>
 Cooldown:  1 minute
+Cost:  50 move
 
 Shadowstep allows a talented assassin to step into one shadow and, seemingly,
 appear out of another. This ability takes you instantly to your target. It has
 a maximum range of 7 map tiles and requires Infiltrate if you don't have per-
 mission to enter your target's location.
+
+You cannot shadowstep to NPCs that belong to other empires, or that are on land
+that belongs to other empires.
 
 See also: INFILTRATE
 #
@@ -277,6 +391,17 @@ When you type sneak, there is no way to know if you're actually sneaking. It's
 based on your skill, and how well other people notice you.
 
 See also: HIDE
+#
+"STAGGER JAB"
+
+Stagger Jab
+Class ability: Powerbroker
+Debuff type: Stealth
+
+Your Jab ability causes a debuff equal to your Charisma divided by 5 (rounded
+up) to your victim's to-hit, for 15 seconds. This effect may stack.
+
+See also: JAB
 #
 STEAL STEALING
 
@@ -306,6 +431,7 @@ See also: VAULTCRACKING
 
 Usage:  summon thugs
 Cooldown:  3 minutes
+Cost:  10 move
 
 This ability summons up to (Charisma / 3, rounded up) thugs, who will follow
 you around. This is best combined with the Disguise ability, as you can mask
@@ -319,11 +445,12 @@ Terrify (Stealth ability)
 
 Usage:  terrify [victim]
 Cooldown:  15 seconds
+Debuff type:  Stealth
+Cost:  15 move
 
-Use the power of the shadows to make your foes cower in fear.
-
-Only one person in the room may be terrified at a time. Using the ability on a
-second person will release the first one.
+Use the power of the shadows to make your foes cower in fear, lowering the
+physical and magical damage they deal by an amount equal to your total level
+divided by 30.
 #
 "UNSEEN PASSING"
 

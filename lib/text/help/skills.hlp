@@ -27,8 +27,8 @@ CATAPULT
 Usage:  catapult <direction> 
 
 Catapult is used to launch your catapult in the direction that you want. You
-must have 20 rocks and a catapult to use this. It can only shoot at an
-adjacent room. The command can not be used in deep forests either. 
+must have 12 rocks and a catapult to use this. It can only shoot at an
+adjacent room.
 
 Example:  
 
@@ -50,7 +50,8 @@ CHOP
 Usage:  chop
 
 This command allows you to chop trees in the forest. Beware, trees are a
-limited resource.
+limited resource. You can chop faster if you are stronger, if your axe deals
+more damage, or if you have haste.
 
 See also: BUILD, DEPLETION, SCRAPE, TREES, LUMBER, SAW
 #
@@ -78,7 +79,7 @@ This designates a new room in a building as a specific room type. You must
 specify which direction this new room will be. The first room after the
 entrance must lie directly across from the entrance. After that, you may
 choose any direction you like. Each building is limited on how many rooms it
-may have.
+may have. You can only redesignate rooms once per 60 minutes.
 
 Room types:
  baths - Identical to the free-standing building (castle only)
@@ -92,7 +93,7 @@ Room types:
  larder - A place to store food
  sitting room - No special features
  skybridge - Above-ground hallways used in some tree buildings
- storage - Holds certain items
+ store room - Holds certain items
  study - Has a global message board
  throne room - Castle only
  tunnel - Underground hallways used in some buildings
@@ -130,7 +131,7 @@ FLINT "FLINT SET"
 Flint can be combined with rocks (using CRAFT) to create a flint set, which
 can then be used to light torches.
 
-See also: LIGHT
+See also: DIG, LIGHT
 #
 GATHER
 
@@ -190,7 +191,9 @@ LIGHT TORCH
 Usage:  light <item>
 
 To light something, you must have a flint set. You may light sticks to create
-torches.
+torches. You can also light trees or logs to make camp fires.
+
+See also: COOKING FIRE
 #
 MILK
 
@@ -202,6 +205,7 @@ container to hold the milk. Cows can be milked once or twice per day.
 MILL MILLING
 
 Building:  (MM)  Mill  (no skill required)
+Resources:  10 logs, 2 stone blocks
 Built on:  plains, desert
 Stored at the mill:  cornmeal, flour
 Command:  mill [number] <item>
@@ -213,18 +217,20 @@ You can mill:
 
 You must do this at a Mill building. Milling will gain Trade skill up to 15.
 
-See also: COOK
+See also: CRAFTING LEVEL, COOK
 #
 MINE MINES
 
 Building:  &y/&0[]&y\&0  Mine  (no skill required)
+Resources:  4 logs
 Built on:  mountain
 Command:  mine
 
 "Mine" is both a building type, and the command to work in that building. Mines
 must be built on mountains, and can only be entered from one side even before
 you complete them. To work in a mine, you need a pick of some kind, although a
-simple handaxe will also work.
+simple handaxe will also work. A better mining tool and more Strength will help
+you mine faster, as will haste.
 
 Mines have a limited amount of ore, and do not replenish. However, if you fully
 dismantle a mine, its mountain will reset when the MUD celebrates a new year
@@ -232,7 +238,7 @@ dismantle a mine, its mountain will reset when the MUD celebrates a new year
 tile will involve digging a new mine shaft and the mineral found there could be
 completely different.
 
-Mines always count as in-city territory, no matter where you build them.
+Mines count as in-city territory as far away as 3x a city's normal radius.
 
 See HELP IRON GUIDE for help getting started on mining and using iron.
 
@@ -249,6 +255,7 @@ See also: DEPLETION, DEEP MINES, PROSPECT, RARE METALS
 MINT
 
 Building:  [MM]  Mint  (Commerce ability)
+Resources:  12 lumber, 4 nails, 12 blocks, 4 coin mills
 Built on:  plains, desert
 Fame:  5
 Command:  mint <object>
@@ -267,6 +274,8 @@ Usage:  morph <form>
 Some powers allow you to change shape, using the morph command. Morphing takes
 a few seconds, but if you're in combat you can morph instantly at a higher
 cost than normal.
+
+Morphing will remove your disguise, if you have one.
 
 See also: ANIMAL FORMS, WOLF FORM, BAT FORM, HORRID FORM, MIST FORM
 #
@@ -328,12 +337,12 @@ The Woodworking ability increases how fast you can scrape logs.
 
 See also: TREES, SAW, WOODWORKING
 #
-SHEAR
+SHEAR SHEARING
 
 Usage:  shear <animal>
 
 You can shear sheep in a stable, giving you wool to weave into cloth. Sheep
-can be shorn every two days.
+can be shorn every 6 hours (of real time).
 
 See also: WEAVE
 #
@@ -350,7 +359,7 @@ Example:
 
   > shoot deer 
 #
-SKILL SKILLS ABILITY ABILITIES
+SKILL SKILLS ABILITY ABILITIES "SKILL BUY" "SKILL RESET" "SKILL LEVELS"
 
 Usage:  skills -- list all skills
         skill <name> -- see abilities in that skill
@@ -376,7 +385,8 @@ without the skill name, you can see which skills have free resets available.
 It also shows the range in which you can gain the skill, although you can gain
 no more than 10 points from any one ability.
 
-See also: NOSKILL, SPECIALIZE, SKILL CAPS, SKILL LEVELS
+See also: NOSKILL, SPECIALIZE, SKILL CAPS, SKILL DROP, TRAINING SKILLS, ABILITY
+POINTS
 #
 "SKILL CAPS" CAPS "MAX SKILL" "MAXIMUM SKILL" "CLASS SKILLS" "SPECIALTY SKILLS" "BASIC SKILLS"
 
@@ -398,12 +408,28 @@ zero (0). Once you have fewer than two skills at zero, you can no longer choose
 to specialize an extra skill. The opposite is also true: if you specialize an
 extra skill, you'll no longer be able to gain in your last two zeroes.
 
-See also: SKILLS, SPECIALIZE
+You can use 'skill drop' if you want to lower one of your skills so that you
+can then start raising a different one.
+
+See also: SKILLS, SKILL DROP, SPECIALIZE
 #
-"SKILL LEVELS" "SKILL POINTS" "SKILL EXPERIENCE" "SKILLUPS" EXPERIENCE
+"SKILL DROP"
+
+Usage:  skill drop <skill> <level>
+
+This command allows you to voluntary give up points in one of your skills.
+You might do this because you accidentally raised one from 0, or because you
+want to try a different specialty.
+
+Once you use this command, those skill points are gone forever. You will also
+lose any abilities you purchased above the new level.
+
+See also: SKILL
+#
+"TRAINING SKILLS" "SKILL POINTS" "SKILL EXPERIENCE" "SKILLUPS" EXPERIENCE
 
 The two ways to gain skill levels are:
-- By using "green" abilities from the skill's tree (abilities that aren't at
+- By using "yellow" abilities from the skill's tree (abilities that aren't at
   max).
 - For skills under level 15, you can usually gain skill by doing "chores". See
   the help file for each skill tree for more information on leveling it.
@@ -416,7 +442,7 @@ experience all the way to 100%.
 When your skills hit level 50 or 75, you will not be able to gain additional
 levels in the skill unless you specialize into it.
 
-See also: SKILL CAPS, SPECIALIZE
+See also: SKILL CAPS, SPECIALIZE, SKILLS
 #
 SMELT MELT
 
@@ -445,7 +471,7 @@ skill and allow you to continue leveling it.
 NOTE: This is a temporary command. In the future, we intend to use quests and
 other mechanisms for players who want to specialize.
 
-See also: SKILL
+See also: SKILL, SKILL CAPS
 #
 "STARTING LOCATION" "START LOCATION" "TOWER OF SOULS" TRANSPORT TOS
 
@@ -471,12 +497,14 @@ creatures, items, or bodyguards. Each may serve a different purpose, so you
 should consult the help file for the specific summon ability you're using.
 
 See also:
-SUMMON HUMANS  (Vampire ability)
+SUMMON BODYGUARD  (Empire ability)
 SUMMON ANIMALS  (Natural Magic ability)
 SUMMON GUARDS  (Empire ability)
-SUMMON BODYGUARD  (Empire ability)
-SUMMON THUGS  (Stealth ability)
+SUMMON HUMANS  (Vampire ability)
 SUMMON MATERIAlS  (High Sorcery ability)
+SUMMON PLAYER  (at an Astral Nexus)
+SUMMON THUGS  (Stealth ability)
+ADVENTURE SUMMON  (inside an adventure)
 #
 TENT TENTS
 

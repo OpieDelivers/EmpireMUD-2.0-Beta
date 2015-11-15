@@ -1,5 +1,5 @@
 /* ************************************************************************
-*   File: constants.c                                     EmpireMUD 2.0b1 *
+*   File: constants.c                                     EmpireMUD 2.0b3 *
 *  Usage: Numeric and string contants used by the MUD                     *
 *                                                                         *
 *  EmpireMUD code base by Paul Clarke, (C) 2000-2015                      *
@@ -40,12 +40,16 @@
 
 // external funcs
 void afk_notify(char_data *ch);
+void tog_informative(char_data *ch);
+void tog_mapcolor(char_data *ch);
+void tog_political(char_data *ch);
 
 
  //////////////////////////////////////////////////////////////////////////////
 //// EMPIREMUD CONSTANTS /////////////////////////////////////////////////////
 
-const char *version = "EmpireMUD 2.0 beta 1";
+// Shown on the "version" command and sent over MSSP
+const char *version = "EmpireMUD 2.0 beta 3";
 
 
 // data for the built-in game levels -- this adapts itself if you reduce the number of immortal levels
@@ -104,6 +108,8 @@ const char *adventure_flags[] = {
 	"!NEARBY",
 	"ROTATABLE",
 	"CONFUSING-RANDOMS",
+	"!NEWBIE",
+	"NEWBIE-ONLY",
 	"\n"
 };
 
@@ -154,6 +160,10 @@ const char *room_template_flags[] = {
 	"PEACEFUL",
 	"NEED-BOAT",
 	"!TELEPORT",
+	"LOOK-OUT",
+	"!LOCATION",
+	"PIGEON-POST",
+	"COOKING-FIRE",
 	"\n"
 };
 
@@ -328,6 +338,9 @@ const char *grant_bits[] = {
 	"authorize",
 	"forgive",
 	"hostile",
+	"slay",
+	"island",	// 35
+	"oset",
 	"\n"
 };
 
@@ -354,6 +367,7 @@ const char *player_bits[] = {
 	"!RESTICT",
 	"KEEP-LOGIN",
 	"EXTRACTED",
+	"ADV-SUMMON"
 	"\n"
 };
 
@@ -369,7 +383,7 @@ const char *preference_bits[] = {
 	"MORTLOG",
 	"!REP",
 	"LIGHT",
-	"COLOR",
+	"INCOGNITO",
 	"!WIZ",
 	"!MCOL",
 	"!HASSLE",
@@ -387,6 +401,7 @@ const char *preference_bits[] = {
 	"!SPAM",
 	"SCREENREADER",
 	"STEALTHABLE",
+	"WIZHIDE",
 	"\n"
 };
 
@@ -405,13 +420,13 @@ const struct toggle_data_type toggle_data[] = {
 	
 	{ "shout", TOG_OFFON, PRF_DEAF, 0, NULL },
 	{ "brief", TOG_ONOFF, PRF_BRIEF, 0, NULL },
-	{ "political", TOG_ONOFF, PRF_POLITICAL, 0, NULL },
+	{ "political", TOG_ONOFF, PRF_POLITICAL, 0, tog_political },
 	
-	{ "color", TOG_ONOFF, PRF_COLOR, 0, NULL },
+	{ "autorecall", TOG_ONOFF, PRF_AUTORECALL, 0, NULL },
 	{ "compact", TOG_ONOFF, PRF_COMPACT, 0, NULL },
-	{ "informative", TOG_ONOFF, PRF_INFORMATIVE, 0, NULL },
+	{ "informative", TOG_ONOFF, PRF_INFORMATIVE, 0, tog_informative },
 	
-	{ "map-color", TOG_OFFON, PRF_NOMAPCOL, 0, NULL },
+	{ "map-color", TOG_OFFON, PRF_NOMAPCOL, 0, tog_mapcolor },
 	{ "no-repeat", TOG_ONOFF, PRF_NOREPEAT, 0, NULL },
 	{ "screen-reader", TOG_ONOFF, PRF_SCREEN_READER, 0, NULL },
 	
@@ -420,7 +435,6 @@ const struct toggle_data_type toggle_data[] = {
 	{ "afk", TOG_ONOFF, PRF_AFK, 0, afk_notify },
 	
 	{ "channel-joins", TOG_OFFON, PRF_NO_CHANNEL_JOINS, 0, NULL },
-	{ "autorecall", TOG_ONOFF, PRF_AUTORECALL, 0, NULL },
 	{ "stealthable", TOG_ONOFF, PRF_STEALTHABLE, LVL_APPROVED, NULL },
 	
 	// imm section
@@ -430,6 +444,9 @@ const struct toggle_data_type toggle_data[] = {
 	
 	{ "hassle", TOG_OFFON, PRF_NOHASSLE, LVL_START_IMM, NULL },
 	{ "idle-out", TOG_OFFON, PRF_NO_IDLE_OUT, LVL_START_IMM, NULL },
+	{ "incognito", TOG_ONOFF, PRF_INCOGNITO, LVL_START_IMM, NULL },
+	
+	{ "wizhide", TOG_ONOFF, PRF_WIZHIDE, LVL_START_IMM, NULL },
 	
 	// this goes last
 	{ "\n", 0, NOBITS, 0, NULL }
@@ -446,7 +463,7 @@ const char *connected_types[] = {
 	"Get new PW",	// 5
 	"Confirm new PW",
 	"Select sex",
-	"Color?",
+		"UNUSED 1",
 	"Reading MOTD",
 	"Disconnecting",	// 10
 	"Referral?",
@@ -454,7 +471,7 @@ const char *connected_types[] = {
 	"Last name?",
 	"Get last name",
 	"Cnf last name",	// 15
-	"Bookedit",
+		"UNUSED 2",
 	"Have alt?",
 	"Alt name",
 	"Alt password",
@@ -512,16 +529,16 @@ const char *dirs[] = {
 
 // alternate direction names, to allow certain abbrevs in argument parsing -- NUM_OF_DIRS
 const char *alt_dirs[] = {
-	"north",
-	"east",
-	"south",
-	"west",
+	"n",
+	"e",
+	"s",
+	"w",
 	"nw",
 	"ne",
 	"sw",
 	"se",
-	"up",
-	"down",
+	"u",
+	"d",
 	"fore",
 	"starboard",
 	"port",
@@ -718,6 +735,7 @@ const char *affected_bits[] = {
 	"!STEALTH",
 	"!VAMPIRE",
 	"!STUN",
+	"*ORDERED",
 	"\n"
 };
 
@@ -754,6 +772,7 @@ const char *affected_bits_consider[] = {
 	"$E is immune to Stealth debuffs.",	// !stealth
 	"$E is immune to Vampire debuffs.",	// !vampire
 	"$E is immune to stuns.",	// !stun
+	"",	// ordred
 	"\n"
 };
 
@@ -781,6 +800,7 @@ const bool aff_is_bad[] = {
 	TRUE,	// stunned
 	TRUE,	// stoned
 	TRUE,	// !blood
+	FALSE,
 	FALSE,
 	FALSE,
 	FALSE,
@@ -841,6 +861,23 @@ const char *mana_levels[] = {
 };
 
 
+// for prompt -- 0-10 relates to 0-100% blood
+const char *blood_levels[] = {
+	"no blood",	// 0
+	"extremely blood-starved",
+	"blood-starved",
+	"low blood",
+	"half blood",
+	"half blood",	// 5
+	"half blood",
+	"lots of blood",
+	"high blood",
+	"high blood",
+	"satiated",	// 10
+	"\n"
+};
+
+
 /* SEX_x */
 const char *genders[] = {
 	"neutral",
@@ -889,23 +926,39 @@ const char *injury_bits[] = {
 
 /* APPLY_x (1/3) */
 const char *apply_types[] = {
-	"NONE",			"STRENGTH",		"DEXTERITY",
-	"HEALTH-REGEN",	"CHARISMA",		"GREATNESS",
-	"MOVE-REGEN",	"MANA-REGEN",	"INTELLIGENCE",
-	"WITS",			"AGE",			"MAX-MOVE",
-	"SOAK",			"BLOCK",		"HEAL-OVER-TIME",
-	"MAX-HEALTH",	"MAX-MANA",		"TO-HIT",
-	"DODGE",		"INVENTORY",	"MAX-BLOOD",
+	"NONE",
+	"STRENGTH",
+	"DEXTERITY",
+	"HEALTH-REGEN",
+	"CHARISMA",
+	"GREATNESS",
+	"MOVE-REGEN",
+	"MANA-REGEN",
+	"INTELLIGENCE",
+	"WITS",
+	"AGE",
+	"MAX-MOVE",
+	"RESIST-PHYSICAL",
+	"BLOCK",
+	"HEAL-OVER-TIME",
+	"MAX-HEALTH",
+	"MAX-MANA",
+	"TO-HIT",
+	"DODGE",
+	"INVENTORY",
+	"MAX-BLOOD",
 	"BONUS-PHYSICAL",
 	"BONUS-MAGICAL",
 	"BONUS-HEALING",
+	"RESIST-MAGICAL",
+	"CRAFTING",
 	"\n"
 };
 
 
 // APPLY_x (2/3) -- for rate_item (amount multiplied by the apply modifier to make each of these equal to 1)
 const double apply_values[] = {
-	0,	// "NONE",
+	0.01,	// "NONE",
 	1,	// "STRENGTH",
 	1,	// "DEXTERITY",
 	0.5,	// "HEALTH-REGEN",
@@ -917,18 +970,20 @@ const double apply_values[] = {
 	1,	// "WITS",
 	0.1,	// "AGE",
 	0.025,	// "MAX-MOVE",
-	1.4,	// "SOAK",
-	0.3,	// "BLOCK",
+	0.5,	// RESIST-PHYSICAL
+	0.25,	// "BLOCK",
 	3,	// "HEAL-OVER-TIME",
-	0.025,	// "HEALTH",
+	0.020,	// "HEALTH",
 	0.025,	// "MAX-MANA",
 	0.15,	// "TO-HIT",
-	0.15,	// "DODGE",
+	0.10,	// "DODGE",
 	0.15,	// "INVENTORY",
 	0.02,	// "BLOOD",
 	1,	// BONUS-PHYSICAL
 	1,	// BONUS-MAGICAL
-	1	// BONUS-HEALING
+	1,	// BONUS-HEALING
+	0.5,	// RESIST-MAGICAL
+	0.01	// CRAFTING
 };
 
 
@@ -946,7 +1001,7 @@ const int apply_attribute[] = {
 	WITS,
 	NOTHING,	// age
 	NOTHING,	// max-move
-	NOTHING,	// soak
+	NOTHING,	// resist-physical
 	NOTHING,	// block
 	NOTHING,	// heal-over-time
 	NOTHING,	// max-health
@@ -957,7 +1012,9 @@ const int apply_attribute[] = {
 	NOTHING,	// blood
 	NOTHING,	// bonus-phys
 	NOTHING,	// bonus-mag
-	NOTHING	// bonus-heal
+	NOTHING,	// bonus-heal
+	NOTHING,	// resist-magical
+	NOTHING	// crafting
 };
 
 
@@ -1025,6 +1082,8 @@ const char *craft_types[] = {
 	"BREW",
 	"MIX",
 	"BUILD",
+	"WEAVE",
+	"WORKFORCE",
 	"\n"
 };
 
@@ -1053,19 +1112,23 @@ const char *empire_log_types[] = {
 	"Members",
 	"Territory",
 	"Trade",
+	"Logins",
+	"Shipping",
 	"\n"
 };
 
 
 // ELOG_x: Whether or not logs are shown to players online
 const bool show_empire_log_type[] = {
-	TRUE,
-	TRUE,
-	TRUE,
-	TRUE,
-	TRUE,
-	TRUE,
-	FALSE
+	TRUE,	// none
+	TRUE,	// admin
+	TRUE,	// diplo
+	TRUE,	// hostility
+	TRUE,	// members
+	TRUE,	// territory
+	FALSE,	// trade
+	TRUE,	// logins
+	FALSE	// shipments
 };
 
 
@@ -1090,6 +1153,7 @@ const char *techs[] = {
 	"Master Portals",
 	"Skilled Labor",
 	"Trade Routes",
+	"Exarch Crafts",
 	"\n"
 };
 
@@ -1118,6 +1182,10 @@ const char *priv[] = {
 	"cities",
 	"trade",
 	"logs",
+	"shipping",
+	"homes",
+	"storage",
+	"warehouse",
 	"\n"
 };
 
@@ -1178,7 +1246,7 @@ const char *action_bits[] = {
 	"MOUNTAIN-WALK",	// 10
 	"AQUATIC",
 	"*PLURAL",
-	"*",
+	"NO-ATTACK",
 	"SPAWNED",
 	"CHAMPION",	// 15
 	"EMPIRE",
@@ -1268,29 +1336,29 @@ const char *wear_keywords[] = {
 
 // WEAR_x -- data for each wear slot
 const struct wear_data_type wear_data[NUM_WEARS] = {
-	// eq tag,				 wear bit,		count-stats, cascade-pos, already-wearing, wear-message-to-room, wear-message-to-char
-	{ "    <worn on head> ", ITEM_WEAR_HEAD, TRUE, NO_WEAR, "You're already wearing $p on your head.", "$n wears $p on $s head.", "You wear $p on your head." },
-	{ "    <worn on ears> ", ITEM_WEAR_EARS, TRUE, NO_WEAR, "You're already wearing $p on your ears.", "$n pins $p onto $s ears.", "You pin $p onto your ears." },
-	{ "<worn around neck> ", ITEM_WEAR_NECK, TRUE, WEAR_NECK_2, "YOU SHOULD NEVER SEE THIS MESSAGE. PLEASE REPORT.", "$n wears $p around $s neck.", "You wear $p around your neck." },
-	{ "<worn around neck> ", ITEM_WEAR_NECK, TRUE, NO_WEAR, "You're already wearing enough around your neck.", "$n wears $p around $s neck.", "You wear $p around your neck." },
-	{ " <worn as clothes> ", ITEM_WEAR_CLOTHES, TRUE, NO_WEAR, "You're already wearing $p as clothes.", "$n wears $p as clothing.", "You wear $p as clothing." },
-	{ "   <worn as armor> ", ITEM_WEAR_ARMOR, TRUE, NO_WEAR, "You're already wearing $p as armor.", "$n wears $p as armor.", "You wear $p as armor." },
-	{ " <worn about body> ", ITEM_WEAR_ABOUT, TRUE, NO_WEAR, "You're already wearing $p about your body.", "$n wears $p about $s body.", "You wear $p around your body." },
-	{ "    <worn on arms> ", ITEM_WEAR_ARMS, TRUE, NO_WEAR, "You're already wearing $p on your arms.", "$n wears $p on $s arms.", "You wear $p on your arms." },
-	{ "  <worn on wrists> ", ITEM_WEAR_WRISTS, TRUE, NO_WEAR, "You're already wearing $p on your wrists.", "$n wears $p on $s wrists.", "You wear $p on your wrists." },
-	{ "   <worn on hands> ", ITEM_WEAR_HANDS, TRUE, NO_WEAR, "You're already wearing $p on your hands.", "$n puts $p on $s hands.", "You put $p on your hands." },
-	{ "  <worn on finger> ", ITEM_WEAR_FINGER, TRUE, WEAR_FINGER_L, "YOU SHOULD NEVER SEE THIS MESSAGE. PLEASE REPORT.", "$n slides $p on to $s right ring finger.", "You slide $p on to your right ring finger." },
-	{ "  <worn on finger> ", ITEM_WEAR_FINGER, TRUE, NO_WEAR, "You're already wearing something on both of your ring fingers.", "$n slides $p on to $s left ring finger.", "You slide $p on to your left ring finger." },
-	{ "<worn about waist> ", ITEM_WEAR_WAIST, TRUE, NO_WEAR, "You already have $p around your waist.", "$n wears $p around $s waist.", "You wear $p around your waist." },
-	{ "    <worn on legs> ", ITEM_WEAR_LEGS, TRUE, NO_WEAR, "You're already wearing $p on your legs.", "$n puts $p on $s legs.", "You put $p on your legs." },
-	{ "    <worn on feet> ", ITEM_WEAR_FEET, TRUE, NO_WEAR, "You're already wearing $p on your feet.", "$n wears $p on $s feet.", "You wear $p on your feet." },
-	{ " <carried as pack> ", ITEM_WEAR_PACK, TRUE, NO_WEAR, "You're already using $p.", "$n starts using $p.", "You start using $p." },
-	{ "  <used as saddle> ", ITEM_WEAR_SADDLE, TRUE, NO_WEAR, "You're already using $p.", "$n start using $p.", "You start using $p." },
-	{ "          (sheath) ", ITEM_WEAR_WIELD, FALSE, WEAR_SHEATH_2, "You've already got something sheathed.", "$n sheathes $p.", "You sheathe $p." },
-	{ "          (sheath) ", ITEM_WEAR_WIELD, FALSE, NO_WEAR, "You've already got something sheathed.", "$n sheathes $p.", "You sheathe $p." },
-	{ "         <wielded> ", ITEM_WEAR_WIELD, 	TRUE, NO_WEAR, "You're already wielding $p.", "$n wields $p.", "You wield $p." },
-	{ "          <ranged> ", ITEM_WEAR_RANGED, TRUE, NO_WEAR, "You're already using $p.", "$n uses $p.", "You use $p." },
-	{ "            <held> ", ITEM_WEAR_HOLD, TRUE, NO_WEAR, "You're already holding $p.", "$n grabs $p.", "You grab $p." }
+	// eq tag,				 wear bit,		count-stats, gear-level-mod, cascade-pos, already-wearing, wear-message-to-room, wear-message-to-char
+	{ "    <worn on head> ", ITEM_WEAR_HEAD, TRUE, 1.0, NO_WEAR, "You're already wearing $p on your head.", "$n wears $p on $s head.", "You wear $p on your head." },
+	{ "    <worn on ears> ", ITEM_WEAR_EARS, TRUE, 1.0, NO_WEAR, "You're already wearing $p on your ears.", "$n pins $p onto $s ears.", "You pin $p onto your ears." },
+	{ "<worn around neck> ", ITEM_WEAR_NECK, TRUE, 1.0, WEAR_NECK_2, "YOU SHOULD NEVER SEE THIS MESSAGE. PLEASE REPORT.", "$n wears $p around $s neck.", "You wear $p around your neck." },
+	{ "<worn around neck> ", ITEM_WEAR_NECK, TRUE, 1.0, NO_WEAR, "You're already wearing enough around your neck.", "$n wears $p around $s neck.", "You wear $p around your neck." },
+	{ " <worn as clothes> ", ITEM_WEAR_CLOTHES, TRUE, 0, NO_WEAR, "You're already wearing $p as clothes.", "$n wears $p as clothing.", "You wear $p as clothing." },
+	{ "   <worn as armor> ", ITEM_WEAR_ARMOR, TRUE, 2.0, NO_WEAR, "You're already wearing $p as armor.", "$n wears $p as armor.", "You wear $p as armor." },
+	{ " <worn about body> ", ITEM_WEAR_ABOUT, TRUE, 1.0, NO_WEAR, "You're already wearing $p about your body.", "$n wears $p about $s body.", "You wear $p around your body." },
+	{ "    <worn on arms> ", ITEM_WEAR_ARMS, TRUE, 1.0, NO_WEAR, "You're already wearing $p on your arms.", "$n wears $p on $s arms.", "You wear $p on your arms." },
+	{ "  <worn on wrists> ", ITEM_WEAR_WRISTS, TRUE, 1.0, NO_WEAR, "You're already wearing $p on your wrists.", "$n wears $p on $s wrists.", "You wear $p on your wrists." },
+	{ "   <worn on hands> ", ITEM_WEAR_HANDS, TRUE, 1.0, NO_WEAR, "You're already wearing $p on your hands.", "$n puts $p on $s hands.", "You put $p on your hands." },
+	{ "  <worn on finger> ", ITEM_WEAR_FINGER, TRUE, 1.0, WEAR_FINGER_L, "YOU SHOULD NEVER SEE THIS MESSAGE. PLEASE REPORT.", "$n slides $p on to $s right ring finger.", "You slide $p on to your right ring finger." },
+	{ "  <worn on finger> ", ITEM_WEAR_FINGER, TRUE, 1.0, NO_WEAR, "You're already wearing something on both of your ring fingers.", "$n slides $p on to $s left ring finger.", "You slide $p on to your left ring finger." },
+	{ "<worn about waist> ", ITEM_WEAR_WAIST, TRUE, 1.0, NO_WEAR, "You already have $p around your waist.", "$n wears $p around $s waist.", "You wear $p around your waist." },
+	{ "    <worn on legs> ", ITEM_WEAR_LEGS, TRUE, 1.0, NO_WEAR, "You're already wearing $p on your legs.", "$n puts $p on $s legs.", "You put $p on your legs." },
+	{ "    <worn on feet> ", ITEM_WEAR_FEET, TRUE, 1.0, NO_WEAR, "You're already wearing $p on your feet.", "$n wears $p on $s feet.", "You wear $p on your feet." },
+	{ " <carried as pack> ", ITEM_WEAR_PACK, TRUE, 0.5, NO_WEAR, "You're already using $p.", "$n starts using $p.", "You start using $p." },
+	{ "  <used as saddle> ", ITEM_WEAR_SADDLE, TRUE, 0, NO_WEAR, "You're already using $p.", "$n start using $p.", "You start using $p." },
+	{ "          (sheath) ", ITEM_WEAR_WIELD, FALSE, 0, WEAR_SHEATH_2, "You've already got something sheathed.", "$n sheathes $p.", "You sheathe $p." },
+	{ "          (sheath) ", ITEM_WEAR_WIELD, FALSE, 0, NO_WEAR, "You've already got something sheathed.", "$n sheathes $p.", "You sheathe $p." },
+	{ "         <wielded> ", ITEM_WEAR_WIELD, 	TRUE, 2.0, NO_WEAR, "You're already wielding $p.", "$n wields $p.", "You wield $p." },
+	{ "          <ranged> ", ITEM_WEAR_RANGED, TRUE, 0, NO_WEAR, "You're already using $p.", "$n uses $p.", "You use $p." },
+	{ "            <held> ", ITEM_WEAR_HOLD, TRUE, 1.0, NO_WEAR, "You're already holding $p.", "$n grabs $p.", "You grab $p." }
 };
 
 
@@ -1426,6 +1494,9 @@ const char *extra_bits[] = {
 	"TOOL-PAN",
 	"TOOL-SHOVEL",
 	"!AUTOSTORE",
+	"HARD-DROP",
+	"GROUP-DROP",
+	"GENERIC-DROP",
 	"\n"
 };
 
@@ -1454,6 +1525,9 @@ const char *extra_bits_inv_flags[] = {
 	"",	// pan
 	"",	// shovel
 	"",	// !autostore
+	"",	// hard-drop
+	"",	// group-drop
+	"",	// generic-drop
 	"\n"
 };
 
@@ -1481,7 +1555,10 @@ const double obj_flag_scaling_bonus[] = {
 	1.0,	// OBJ_KEEP
 	1.0,	// OBJ_TOOL_PAN
 	1.0,	// OBJ_TOOL_SHOVEL
-	1.0	// OBJ_NO_AUTOSTORE
+	1.0,	// OBJ_NO_AUTOSTORE
+	1.2,	// OBJ_HARD_DROP
+	1.4,	// OBJ_GROUP_DROP
+	1.0	// OBJ_GENERIC_DROP
 };
 
 
@@ -1508,8 +1585,8 @@ const struct material_data materials[NUM_MATERIALS] = {
 
 // ARMOR_x part 1 - names
 const char *armor_types[NUM_ARMOR_TYPES+1] = {
-	"cloth",
-	"leather",
+	"mage",
+	"light",
 	"medium",
 	"heavy",
 	"\n"
@@ -1518,10 +1595,10 @@ const char *armor_types[NUM_ARMOR_TYPES+1] = {
 
 // ARMOR_x part 2 - scale values
 const double armor_scale_bonus[NUM_ARMOR_TYPES] = {
-	1.2,	// cloth
-	1.3333,	// leather
-	1.25,	// medium
-	1.5		// heavy
+	1.2,	// mage
+	1.2,	// light
+	1.2,	// medium
+	1.2		// heavy
 };
 
 
@@ -1580,7 +1657,7 @@ int drink_aff[][3] = {
 	{ 2, 1, 1 },	/* ale		*/
 	{ 3, 1, 1 },	/* cider	*/
 	{ 0, 2, 2 },	/* milk		*/
-	{ 0, 2, -1 },	/* blood	*/
+	{ 0, 0, -1 },	/* blood	*/
 	{ 0, 0, 1 },	/* honey	*/
 	{ 0, 4, 0 },	// bean soup
 	{ 0, 0, 1 },	// coffee
@@ -1668,7 +1745,8 @@ struct attack_hit_type attack_hit_info[NUM_ATTACK_TYPES] = {
 	{ "swipe", "swipe", "swipes", { 3.6, 3.8, 4.0 }, WEAPON_BLUNT, DAM_PHYSICAL },
 	{ "tail swipe", "swipe", "swipes", { 4.0, 4.2, 4.4 }, WEAPON_BLUNT, DAM_PHYSICAL },
 	{ "peck", "peck", "pecks", { 2.6, 2.8, 3.0 }, WEAPON_BLUNT, DAM_PHYSICAL },
-	{ "gore", "gore", "gores", { 3.9, 4.1, 4.3 }, WEAPON_BLUNT, DAM_PHYSICAL }
+	{ "gore", "gore", "gores", { 3.9, 4.1, 4.3 }, WEAPON_BLUNT, DAM_PHYSICAL },
+	{ "mana blast", "blast", "blasts", { 2.8, 3.0, 3.2 }, WEAPON_MAGIC, DAM_MAGICAL }
 };
 
 
@@ -1700,6 +1778,7 @@ const char *olc_flag_bits[] = {
 	"!TRIGGER",
 	"!ADVENTURE",
 	"!ROOMTEMPLATE",
+	"!GLOBAL",
 	"\n"
 };
 
@@ -1716,6 +1795,8 @@ const char *olc_type_bits[NUM_OLC_TYPES+1] = {
 	"sector",
 	"adventure",
 	"roomtemplate",
+	"global",
+	"book",
 	"\n"
 };
 
@@ -1732,7 +1813,7 @@ const char *bld_on_flags[] = {
 	"desert",
 	"river",
 	"jungle",
-		"*",
+	"not player made",
 	"ocean",
 	"oasis",
 	"crops",
@@ -1758,7 +1839,7 @@ const char *bld_flags[] = {
 	"!NPC",
 	"BARRIER",
 	"TAVERN",
-	"COUNTS-AS-CITY",
+	"LARGE-CITY-RADIUS",
 	"MINE",
 	"ATTACH-ROAD",
 	"BURNABLE",
@@ -1786,6 +1867,11 @@ const char *bld_flags[] = {
 	"HIGH-DEPLETION",
 	"PORTAL",
 	"BEDROOM",
+	"!DELETE",
+	"SUMMON-PLAYER",
+	"NEED-BOAT",
+	"LOOK-OUT",
+	"2ND-TERRITORY",
 	"\n"
 };
 
@@ -1854,11 +1940,13 @@ const char *evo_types[] = {
 	"NEAR-SECTOR",
 	"PLANTS-TO",
 	"MAGIC-GROWTH",
+	"NOT-ADJACENT",
+	"NOT-NEAR-SECTOR",
 	"\n"
 };
 
 
-// EVO_VAL_x -- what type of data the evolution.value uses
+// EVO_x -- what type of data the evolution.value uses
 const int evo_val_types[NUM_EVOS] = {
 	EVO_VAL_NUMBER,	// chopped-down
 	EVO_VAL_NONE,	// crop-grows
@@ -1869,7 +1957,17 @@ const int evo_val_types[NUM_EVOS] = {
 	EVO_VAL_NONE,	// trench-full
 	EVO_VAL_SECTOR,	// near-sector
 	EVO_VAL_NONE,	// plants-to
-	EVO_VAL_NONE	// magic-growth
+	EVO_VAL_NONE,	// magic-growth
+	EVO_VAL_SECTOR,	// not-adjacent
+	EVO_VAL_SECTOR,	// not-near-sector
+};
+
+
+// ISLE_x -- island flags
+const char *island_bits[] = {
+	"NEWBIE",
+	"!AGGRO",
+	"\n"
 };
 
 
@@ -1903,6 +2001,18 @@ const char *mapout_color_names[] = {
 	"Brown",	// 25
 	"Medium Gray",
 	"Dark Gray",
+	"Dark Blue",
+	"Dark Azure Blue",
+	"Dark Magenta",	// 30
+	"Dark Cyan",
+	"Lime Green",
+	"Dark Lime Green",
+	"Dark Orange",
+	"Pink",	// 35
+	"Dark Pink",
+	"Tan",
+	"Violet",
+	"Deep Violet",	// 39
 	"\n"
 };
 
@@ -1910,34 +2020,86 @@ const char *mapout_color_names[] = {
 // these must match up to mapout_color_names -- do not insert or change the order
 // these must also match up to the map.php generator
 const char mapout_color_tokens[] = {
-	'*',	// 0
-	'?',
-	'0',
-	'1',
-	'2',
-	'3',	// 5
-	'4',
-	'5',
-	'6',
-	'a',
-	'b',	// 10
-	'c',
-	'd',
-	'e',
-	'f',
-	'g',	// 15
-	'h',
-	'i',
-	'j',
-	'k',
-	'l',	// 20
-	'm',
-	'n',
-	'o',
-	'p',
-	'q',	// 25
-	'r',
-	's'
+	'*',	// "Starting Location",	// 0
+	'?',	// "Neutral",
+	'0',	// "Bright White",
+	'1',	// "Bright Red",
+	'2',	// "Bright Green",
+	'3',	// "Bright Yellow",	// 5
+	'4',	// "Bright Blue",
+	'5',	// "Bright Magenta",
+	'6',	// "Bright Cyan",
+	'a',	// "Dark Red",
+	'b',	// "Pale Green",	// 10
+	'c',	// "Yellow-Green",
+	'd',	// "Sea Green",
+	'e',	// "Medium Green",
+	'f',	// "Dark Green",
+	'g',	// "Olive Green",	// 15
+	'h',	// "Ice Blue",
+	'i',	// "Light Blue",
+	'j',	// "Medium Blue",
+	'k',	// "Deep Blue",
+	'l',	// "Light Tan",	// 20
+	'm',	// "Pale Yellow",
+	'n',	// "Peach",
+	'o',	// "Orange",
+	'p',	// "Yellow Brown",
+	'q',	// "Brown",	// 25
+	'r',	// "Medium Gray",
+	's',	// "Dark Gray",
+	't',	// "Dark Blue",
+	'u',	// "Dark Azure Blue",
+	'v',	// "Dark Magenta",	// 30
+	'w',	// "Dark Cyan",
+	'x',	// "Lime Green",
+	'y',	// "Dark Lime Green",
+	'z',	// "Dark Orange",
+	'A',	// "Pink",	// 35
+	'B',	// "Dark Pink",
+	'C',	// "Tan",
+	'D',	// "Violet",
+	'E',	// "Deep Violet",	// 39
+};
+
+
+// this maps a banner color (the 'r' in "&r") to a mapout_color_token character ('1')
+const char banner_to_mapout_token[][2] = {
+	{ '0', '0' },
+	{ 'n', '0' },
+	// non-bright colors:
+	{ 'r', 'a' },
+	{ 'g', 'f' },
+	{ 'b', 't' },
+	{ 'y', 'p' },
+	{ 'm', 'v' },
+	{ 'c', 'w' },
+	{ 'w', 's' },
+	{ 'a', 'u' },
+	{ 'j', 'g' },
+	{ 'l', 'y' },
+	{ 'o', 'z' },
+	{ 'p', 'B' },
+	{ 't', 'q' },
+	{ 'v', 'E' },
+	// bright colors:
+	{ 'R', '1' },
+	{ 'G', '2' },
+	{ 'B', '4' },
+	{ 'Y', '3' },
+	{ 'M', '5' },
+	{ 'C', '6' },
+	{ 'W', '0' },
+	{ 'A', 'j' },
+	{ 'J', 'd' },
+	{ 'L', 'x' },
+	{ 'O', 'o' },
+	{ 'P', 'A' },
+	{ 'T', 'C' },
+	{ 'V', 'D' },
+	
+	// last
+	{ '\n', '\n' }
 };
 
 
@@ -1991,6 +2153,9 @@ const char *room_extra_types[] = {
 	"garden workforce progress",
 	"quarry workforce progress",
 	"build recipe",
+	"found time",
+	"redesignate time",
+	"ceded",
 	"\n"
 };
 
@@ -2026,7 +2191,7 @@ const char *sector_flags[] = {
 	"SHOW-ON-POLITICAL-MAPOUT",
 	"MAP-BUILDING",
 	"INSIDE-ROOM",
-	"COUNTS-AS-CITY",
+	"LARGE-CITY-RADIUS",
 	"OBSCURE-VISION",
 	"IS-TRENCH",
 		"*",
@@ -2157,7 +2322,16 @@ const char *affect_types[] = {
 	"stunning blow",
 	"stun immunity",	// 50
 	"war delay",
-	"unburdened",	// 52
+	"unburdened",
+	"shadow kick",
+	"stagger jab",
+	"shadowcage",	// 55
+	"howl",
+	"crucial jab",
+	"diversion",
+	"shadow jab",
+	"confer",	// 60
+	"conferred",
 	"\n"
 	};
 
@@ -2216,7 +2390,16 @@ const char *affect_wear_off_msgs[] = {
 	"You are no longer dazed by that stunning blow.",
 	"Your stun immunity expires.",	// 50
 	"Your war delay ends and you are free to act.",
-	"You feel the weight of the world return.",	// 52
+	"You feel the weight of the world return.",
+	"You are no longer weakened by the shadow kick.",
+	"You are no longer weakened by the stagger jab.",
+	"The shadowcage fades and your focus returns.",	// 55
+	"The terrifying howl fades from your mind.",
+	"You are no longer weakened by the crucial jab.",
+	"You are no longer distracted by the diversion.",
+	"You are no longer weakened by the shadow jab.",
+	"The power you were conferred has faded.",	// 60
+	"Your conferred strength returns.",
 	"\n"
 };
 
@@ -2272,6 +2455,11 @@ const char *cooldown_types[] = {
 	"dispel",
 	"bloodsweat",
 	"earthmeld",
+	"shadowcage",
+	"howl",	// 50
+	"diversion",
+	"rogue flag",
+	"portal sickness",	// 53
 	"\n"
 };
 
@@ -2367,20 +2555,21 @@ const char *trig_types[] = {
 	"Command",
 	"Speech",
 	"Act",
-	"Death",
+	"Death",	// 5
 	"Greet",
 	"Greet-All",
 	"Entry",
 	"Receive",
-	"Fight",
+	"Fight",	// 10
 	"HitPrcnt",
 	"Bribe",
 	"Load",
 	"Memory",
-	"Ability",
+	"Ability",	// 15
 	"Leave",
 	"Door",
-	"UNUSED",
+	"Leave-All",
+	"Fight-Charmed",
 	"\n"
 };
 
@@ -2403,7 +2592,8 @@ const bitvector_t mtrig_argument_types[] = {
 	TRIG_ARG_PERCENT,	// memory
 	TRIG_ARG_PERCENT,	// ability
 	TRIG_ARG_PERCENT,	// leave
-	TRIG_ARG_PERCENT	// door
+	TRIG_ARG_PERCENT,	// door
+	TRIG_ARG_PERCENT	// leave-all
 };
 
 
@@ -2461,7 +2651,7 @@ const char *wtrig_types[] = {
 	"Random",
 	"Command",
 	"Speech",
-	"*",
+	"Adventure Cleanup",
 	"Zone Reset",
 	"Enter",
 	"Drop",
@@ -2485,7 +2675,7 @@ const bitvector_t wtrig_argument_types[] = {
 	TRIG_ARG_PERCENT,	// random
 	TRIG_ARG_COMMAND,	// command
 	TRIG_ARG_PHRASE_OR_WORDLIST,	// speech
-	NOBITS,	// 
+	TRIG_ARG_PERCENT,	// adventure cleanup
 	TRIG_ARG_PERCENT,	// zone reset
 	TRIG_ARG_PERCENT,	// enter
 	TRIG_ARG_PERCENT,	// drop
@@ -2509,6 +2699,7 @@ const char *trig_attach_types[] = {
 	"Object",
 	"Room",
 	"*",	// rmt_trigger -- never set on an actual trigger
+	"*",	// adv_trigger -- never set on an actual trigger
 	"\n"
 };
 
@@ -2518,7 +2709,8 @@ const char **trig_attach_type_list[] = {
 	trig_types,
 	otrig_types,
 	wtrig_types,
-	wtrig_types
+	wtrig_types,	// RMT_TRIGGER (not really used)
+	wtrig_types	// ADV_TRIGGER (not really used)
 };
 
 
@@ -2527,7 +2719,8 @@ const bitvector_t *trig_argument_type_list[] = {
 	mtrig_argument_types,	// MOB_TRIGGER
 	otrig_argument_types,	// OBJ_TRIGGER
 	wtrig_argument_types,	// WLD_TRIGGER
-	wtrig_argument_types	// RMT_TRIGGER (not really used)
+	wtrig_argument_types,	// RMT_TRIGGER (not really used)
+	wtrig_argument_types	// ADV_TRIGGER (not really used)
 };
 
 
@@ -2547,6 +2740,21 @@ const char *fill_words[] = {
 };
 
 
+// GLOBAL_x types
+const char *global_types[] = {
+	"Mob Interactions",
+	"\n"
+};
+
+
+// GLB_FLAG_X global flags
+const char *global_flags[] = {
+	"IN-DEVELOPMENT",
+	"ADVENTURE-ONLY",
+	"\n"
+};
+
+
 // INTERACT_x, see also interact_vnum_types, interact_attach_types
 const char *interact_types[] = {
 	"BUTCHER",
@@ -2561,6 +2769,7 @@ const char *interact_types[] = {
 	"GATHER",
 	"ENCOUNTER",
 	"LIGHT",
+	"PICKPOCKET",
 	"\n"
 };
 
@@ -2572,13 +2781,14 @@ const int interact_attach_types[NUM_INTERACTS] = {
 	TYPE_MOB,
 	TYPE_MOB,
 	TYPE_MOB,
+	TYPE_ROOM,	// dig
 	TYPE_ROOM,
 	TYPE_ROOM,
 	TYPE_ROOM,
 	TYPE_ROOM,
 	TYPE_ROOM,
-	TYPE_ROOM,
-	TYPE_OBJ	// light
+	TYPE_OBJ,	// light
+	TYPE_MOB	// pickpocket
 };
 
 
@@ -2595,7 +2805,8 @@ const byte interact_vnum_types[NUM_INTERACTS] = {
 	TYPE_OBJ,
 	TYPE_OBJ,
 	TYPE_MOB,	// encounter
-	TYPE_OBJ
+	TYPE_OBJ,
+	TYPE_OBJ	// pickpocket
 };
 
 
@@ -2608,6 +2819,7 @@ const char *reserved_words[] = {
 	"me",
 	"all",
 	"room",
+	"of",
 	"someone",
 	"something",
 	"\n"

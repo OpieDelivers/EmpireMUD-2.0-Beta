@@ -1,5 +1,5 @@
 /* ************************************************************************
-*   File: db.player.c                                     EmpireMUD 2.0b1 *
+*   File: db.player.c                                     EmpireMUD 2.0b3 *
 *  Usage: Database functions related to players and the player table      *
 *                                                                         *
 *  EmpireMUD code base by Paul Clarke, (C) 2000-2015                      *
@@ -219,7 +219,7 @@ void build_player_index(void) {
 void char_to_store(char_data *ch, struct char_file_u *st) {
 	int i, iter;
 	struct affected_type *af;
-	struct over_time_effect_type *dot;
+	struct over_time_effect_type *dot, *last_dot;
 	struct cooldown_data *cd;
 	obj_data *char_eq[NUM_WEARS];
 
@@ -246,6 +246,7 @@ void char_to_store(char_data *ch, struct char_file_u *st) {
 		}
 		else {
 			st->affected[i].type = 0;	/* Zero signifies not used */
+			st->affected[i].cast_by = 0;
 			st->affected[i].duration = 0;
 			st->affected[i].modifier = 0;
 			st->affected[i].location = 0;
@@ -253,6 +254,10 @@ void char_to_store(char_data *ch, struct char_file_u *st) {
 
 			st->affected[i].next = 0;
 		}
+	}
+
+	if ((i >= MAX_AFFECT) && af && af->next) {
+		log("SYSERR: WARNING: OUT OF STORE ROOM FOR AFFECTED TYPES!!!");
 	}
 	
 	// over-time effects
@@ -264,6 +269,7 @@ void char_to_store(char_data *ch, struct char_file_u *st) {
 		}
 		else {
 			st->over_time_effects[i].type = 0;
+			st->over_time_effects[i].cast_by = 0;
 			st->over_time_effects[i].damage = 0;
 			st->over_time_effects[i].duration = 0;
 			st->over_time_effects[i].damage_type = 0;
@@ -271,6 +277,10 @@ void char_to_store(char_data *ch, struct char_file_u *st) {
 			st->over_time_effects[i].max_stack = 0;
 			st->over_time_effects[i].next = NULL;
 		}
+	}
+
+	if ((i >= MAX_AFFECT) && dot && dot->next) {
+		log("SYSERR: WARNING: OUT OF STORE ROOM FOR DOT TYPES!!!");
 	}
 
 	/*
@@ -284,9 +294,6 @@ void char_to_store(char_data *ch, struct char_file_u *st) {
 	while (ch->over_time_effects) {
 		dot_remove(ch, ch->over_time_effects);
 	}
-
-	if ((i >= MAX_AFFECT) && af && af->next)
-		log("SYSERR: WARNING: OUT OF STORE ROOM FOR AFFECTED TYPES!!!");
 
 	for (iter = 0; iter < NUM_ATTRIBUTES; ++iter) {
 		ch->aff_attributes[iter] = ch->real_attributes[iter];
@@ -390,9 +397,26 @@ void char_to_store(char_data *ch, struct char_file_u *st) {
 	strcpy(st->pwd, GET_PASSWD(ch));
 
 	/* add spell and eq affections back in now */
-	for (i = 0; i < MAX_AFFECT; i++)
-		if (st->affected[i].type)
+	for (i = 0; i < MAX_AFFECT; i++) {
+		if (st->affected[i].type) {
 			affect_to_char(ch, &st->affected[i]);
+		}
+	}
+	for (i = 0, last_dot = NULL; i < MAX_AFFECT; i++) {
+		if (st->over_time_effects[i].type) {
+			CREATE(dot, struct over_time_effect_type, 1);
+			*dot = st->over_time_effects[i];
+			dot->next = NULL;
+			
+			if (last_dot) {
+				last_dot->next = dot;
+			}
+			else {
+				ch->over_time_effects = dot;
+			}
+			last_dot = dot;
+		}
+	}
 
 	for (i = 0; i < NUM_WEARS; i++) {
 		if (char_eq[i]) {
@@ -487,6 +511,7 @@ void free_char(char_data *ch) {
 	struct channel_history_data *history;
 	struct player_slash_channel *slash;
 	struct interaction_item *interact;
+	struct offer_data *offer;
 	struct lore_data *lore;
 	struct coin_data *coin;
 	struct alias_data *a;
@@ -529,6 +554,11 @@ void free_char(char_data *ch) {
 		while ((a = GET_ALIASES(ch)) != NULL) {
 			GET_ALIASES(ch) = (GET_ALIASES(ch))->next;
 			free_alias(a);
+		}
+		
+		while ((offer = GET_OFFERS(ch))) {
+			GET_OFFERS(ch) = offer->next;
+			free(offer);
 		}
 		
 		while ((slash = GET_SLASH_CHANNELS(ch))) {
@@ -702,13 +732,15 @@ void init_player(char_data *ch) {
 	GET_EMPIRE_VNUM(ch) = NOTHING;
 	GET_PLEDGE(ch) = NOTHING;
 	GET_TOMB_ROOM(ch) = NOWHERE;
+	GET_ADVENTURE_SUMMON_RETURN_LOCATION(ch) = NOWHERE;
+	GET_ADVENTURE_SUMMON_RETURN_MAP(ch) = NOWHERE;
 	
 	// spares
-	ch->player_specials->saved.spare25 = NOTHING;
-	ch->player_specials->saved.spare26 = NOTHING;
-	ch->player_specials->saved.spare27 = NOTHING;
-	ch->player_specials->saved.spare28 = NOTHING;
-	ch->player_specials->saved.spare29 = NOTHING;
+	ch->player_specials->saved.spare30 = NOTHING;
+	ch->player_specials->saved.spare31 = NOTHING;
+	ch->player_specials->saved.spare32 = NOTHING;
+	ch->player_specials->saved.spare33 = NOTHING;
+	ch->player_specials->saved.spare34 = NOTHING;
 }
 
 
@@ -1032,6 +1064,7 @@ void delete_player_character(char_data *ch) {
 * @return int 1 = rent-saved, 0 = crash-saved
 */
 int enter_player_game(descriptor_data *d, int dolog, bool fresh) {
+	void assign_class_abilities(char_data *ch, int class, int role);
 	void clean_lore(char_data *ch);
 	extern int Objload_char(char_data *ch, int dolog);
 	void read_aliases(char_data *ch);
@@ -1040,12 +1073,12 @@ int enter_player_game(descriptor_data *d, int dolog, bool fresh) {
 	extern room_data *find_load_room(char_data *ch);
 	extern int get_ptable_by_name(char *name);
 	void read_saved_vars(char_data *ch);
+	
+	extern bool global_mute_slash_channel_joins;
 	extern int top_idnum;
-	extern const struct wear_data_type wear_data[NUM_WEARS];
 
 	char lbuf[MAX_STRING_LENGTH];
 	int i, iter;
-	double level;
 	empire_data *emp;
 	room_data *load_room = NULL, *map_loc;
 	char_data *ch = d->character;
@@ -1089,6 +1122,8 @@ int enter_player_game(descriptor_data *d, int dolog, bool fresh) {
 		if (load_room && !PLR_FLAGGED(ch, PLR_LOADROOM)) {
 			map_loc = get_map_location_for(load_room);
 			if (GET_LOAD_ROOM_CHECK(ch) == NOWHERE || !map_loc || GET_ROOM_VNUM(map_loc) != GET_LOAD_ROOM_CHECK(ch)) {
+				// ensure they are on the same continent they used to be when it finds them a new loadroom
+				GET_LAST_ROOM(ch) = GET_LOAD_ROOM_CHECK(ch);
 				load_room = NULL;
 			}
 		}
@@ -1134,31 +1169,22 @@ int enter_player_game(descriptor_data *d, int dolog, bool fresh) {
 	affect_total(ch);
 	SAVE_CHAR(ch);
 		
-	// verify class/skill levels are up-to-date
+	// verify class and skill/gear levels are up-to-date
 	update_class(ch);
-	
-	// check equipment levels
-	level = 0;
-	for (iter = 0; iter < NUM_WEARS; ++iter) {
-		if (GET_EQ(ch, iter) && wear_data[iter].count_stats) {
-			level += rate_item(GET_EQ(ch, iter));
-		}
-	}
-	GET_GEAR_LEVEL(ch) = level;
+	determine_gear_level(ch);
 	
 	// clear some player special data
 	GET_MARK_LOCATION(ch) = NOWHERE;
-	GET_RESURRECT_LOCATION(ch) = NOWHERE;
-	GET_RESURRECT_BY(ch) = NOBODY;
-	GET_RESURRECT_ABILITY(ch) = NO_ABIL;
 
 	// re-join slash-channels
+	global_mute_slash_channel_joins = TRUE;
 	for (iter = 0; iter < MAX_SLASH_CHANNELS; ++iter) {
 		if (*GET_STORED_SLASH_CHANNEL(ch, iter)) {
 			sprintf(lbuf, "join %s", GET_STORED_SLASH_CHANNEL(ch, iter));
 			do_slash_channel(ch, lbuf, 0, 0);
 		}
 	}
+	global_mute_slash_channel_joins = FALSE;
 	
 	// free reset?
 	if (RESTORE_ON_LOGIN(ch)) {
@@ -1171,9 +1197,9 @@ int enter_player_game(descriptor_data *d, int dolog, bool fresh) {
 		GET_BLOOD(ch) = GET_MAX_BLOOD(ch);
 		
 		// clear deficits
-		GET_HEALTH_DEFICIT(ch) = 0;
-		GET_MOVE_DEFICIT(ch) = 0;
-		GET_MANA_DEFICIT(ch) = 0;
+		for (iter = 0; iter < NUM_POOLS; ++iter) {
+			GET_DEFICIT(ch, iter) = 0;
+		}
 		
 		// check for confusion!
 		GET_CONFUSED_DIR(ch) = number(0, NUM_SIMPLE_DIRS-1);
@@ -1215,10 +1241,13 @@ int enter_player_game(descriptor_data *d, int dolog, bool fresh) {
 	// remove stale coins
 	cleanup_coins(ch);
 	
+	// verify abils -- TODO should this remove/re-add abilities for the empire? do class abilities affect that?
+	assign_class_abilities(ch, NOTHING, NOTHING);
+	
 	// ensure player has penalty if at war
 	if (fresh && GET_LOYALTY(ch) && is_at_war(GET_LOYALTY(ch))) {
 		int duration = config_get_int("war_login_delay") / SECS_PER_REAL_UPDATE;
-		struct affected_type *af = create_flag_aff(ATYPE_WAR_DELAY, duration, AFF_IMMUNE_PHYSICAL | AFF_NO_ATTACK | AFF_STUNNED);
+		struct affected_type *af = create_flag_aff(ATYPE_WAR_DELAY, duration, AFF_IMMUNE_PHYSICAL | AFF_NO_ATTACK | AFF_STUNNED, ch);
 		affect_join(ch, af, ADD_DURATION);
 	}
 
@@ -1228,7 +1257,10 @@ int enter_player_game(descriptor_data *d, int dolog, bool fresh) {
 	greet_mtrigger(ch, NO_DIR);
 	greet_memory_mtrigger(ch);
 	add_to_lookup_table(GET_ID(ch), (void *)ch);
-
+	
+	// ensure echo is on -- no, this could cause a duplicate echo-on and lead to an echo loop
+	// ProtocolNoEcho(d, false);
+	
 	return load_result;
 }
 
@@ -1286,12 +1318,16 @@ void start_new_character(char_data *ch) {
 	void scale_item_to_level(obj_data *obj, int level);
 	void set_skill(char_data *ch, int skill, int level);
 	extern const char *default_channels[];
+	extern bool global_mute_slash_channel_joins;
 	extern struct promo_code_list promo_codes[];
 	extern int tips_of_the_day_size;
 
 	char lbuf[MAX_INPUT_LENGTH];
 	int type, iter;
 	obj_data *obj;
+	
+	// announce to existing players that we have a newbie
+	mortlog("%s has joined the game", PERS(ch, ch, TRUE));
 
 	set_title(ch, NULL);
 
@@ -1348,10 +1384,12 @@ void start_new_character(char_data *ch) {
 	}
 	
 	// add the default slash channels
+	global_mute_slash_channel_joins = TRUE;
 	for (iter = 0; *default_channels[iter] != '\n'; ++iter) {
 		sprintf(lbuf, "join %s", default_channels[iter]);
 		do_slash_channel(ch, lbuf, 0, 0);
 	}
+	global_mute_slash_channel_joins = FALSE;
 
 	/* Give EQ, if applicable */
 	if (CREATION_ARCHETYPE(ch) != 0) {
@@ -1383,11 +1421,8 @@ void start_new_character(char_data *ch) {
 				continue;
 			}
 			
-			obj = read_object(archetype[type].gear[iter].vnum);
-			
-			if (OBJ_FLAGGED(obj, OBJ_SCALABLE)) {
-				scale_item_to_level(obj, 1);	// lowest possible scale
-			}
+			obj = read_object(archetype[type].gear[iter].vnum, TRUE);
+			scale_item_to_level(obj, 1);	// lowest possible scale
 			
 			if (archetype[type].gear[iter].wear == NOWHERE) {
 				obj_to_char(obj, ch);
@@ -1398,43 +1433,36 @@ void start_new_character(char_data *ch) {
 		}
 
 		// misc items
-		obj = read_object(o_GRAVE_MARKER);
-		if (OBJ_FLAGGED(obj, OBJ_SCALABLE)) {
-			scale_item_to_level(obj, 1);	// lowest possible scale
-		}
+		obj = read_object(o_GRAVE_MARKER, TRUE);
+		scale_item_to_level(obj, 1);	// lowest possible scale
 		obj_to_char(obj, ch);
 		
 		for (iter = 0; iter < 2; ++iter) {
 			// 2 bread
-			obj = read_object(o_BREAD);
-			if (OBJ_FLAGGED(obj, OBJ_SCALABLE)) {
-				scale_item_to_level(obj, 1);	// lowest possible scale
-			}
+			obj = read_object(o_BREAD, TRUE);
+			scale_item_to_level(obj, 1);	// lowest possible scale
 			obj_to_char(obj, ch);
 			
 			// 2 trinket of conveyance
-			obj = read_object(o_TRINKET_OF_CONVEYANCE);
-			if (OBJ_FLAGGED(obj, OBJ_SCALABLE)) {
-				scale_item_to_level(obj, 1);	// lowest possible scale
-			}
+			obj = read_object(o_TRINKET_OF_CONVEYANCE, TRUE);
+			scale_item_to_level(obj, 1);	// lowest possible scale
 			obj_to_char(obj, ch);
 		}
 		
-		obj = read_object(o_BOWL);
-		if (OBJ_FLAGGED(obj, OBJ_SCALABLE)) {
-			scale_item_to_level(obj, 1);	// lowest possible scale
-		}
+		obj = read_object(o_BOWL, TRUE);
+		scale_item_to_level(obj, 1);	// lowest possible scale
 		GET_OBJ_VAL(obj, VAL_DRINK_CONTAINER_CONTENTS) = GET_DRINK_CONTAINER_CAPACITY(obj);
 		GET_OBJ_VAL(obj, VAL_DRINK_CONTAINER_TYPE) = LIQ_WATER;
 		obj_to_char(obj, ch);
+		determine_gear_level(ch);
 	}
 	
 	// apply any bonus traits that needed it
 	apply_bonus_trait(ch, GET_BONUS_TRAITS(ch), TRUE);
 	
 	// if they have a valid promo code, apply it now
-	if (GET_PROMO_ID(ch) >= 0 && promo_codes[(int) GET_PROMO_ID(ch)].apply_func) {
-		(promo_codes[(int) GET_PROMO_ID(ch)].apply_func)(ch);
+	if (GET_PROMO_ID(ch) >= 0 && promo_codes[GET_PROMO_ID(ch)].apply_func) {
+		(promo_codes[GET_PROMO_ID(ch)].apply_func)(ch);
 	}
 	
 	// set up class/level data
@@ -1495,10 +1523,10 @@ static void add_to_account_list(struct empire_member_reader_data **list, empire_
 *
 * @param time_t created The player character's birth time.
 * @param time_t last_login The player's last login time.
-* @param int played_hours Number of hours the player has played, total.
+* @param double played_hours Number of hours the player has played, total.
 * @return bool TRUE if the member has timed out and should not be counted; FALSE if they're ok.
 */
-static bool member_is_timed_out(time_t created, time_t last_login, int played_hours) {	
+static bool member_is_timed_out(time_t created, time_t last_login, double played_hours) {	
 	int member_timeout_full = config_get_int("member_timeout_full") * SECS_PER_REAL_DAY;
 	int member_timeout_newbie = config_get_int("member_timeout_newbie") * SECS_PER_REAL_DAY;
 	int minutes_per_day_full = config_get_int("minutes_per_day_full");
@@ -1509,8 +1537,13 @@ static bool member_is_timed_out(time_t created, time_t last_login, int played_ho
 	}
 	else {
 		double days_played = (double)(time(0) - created) / SECS_PER_REAL_DAY;
-		double avg_min_per_day = 60 * ((double)played_hours / days_played);
+		double avg_min_per_day = 60 * (played_hours / days_played);
 		double timeout;
+		
+		// when playtime drops this low, the character is ALWAYS timed out
+		if (avg_min_per_day <= 1) {
+			return TRUE;
+		}
 		
 		if (avg_min_per_day >= minutes_per_day_full) {
 			timeout = member_timeout_full;
@@ -1537,7 +1570,7 @@ static bool member_is_timed_out(time_t created, time_t last_login, int played_ho
 * @return bool TRUE if the member has timed out and should not be counted; FALSE if they're ok.
 */
 bool member_is_timed_out_cfu(struct char_file_u *chdata) {
-	return member_is_timed_out(chdata->birth, chdata->last_logon, chdata->played / SECS_PER_REAL_HOUR);
+	return member_is_timed_out(chdata->birth, chdata->last_logon, ((double)chdata->played) / SECS_PER_REAL_HOUR);
 }
 
 
@@ -1548,7 +1581,7 @@ bool member_is_timed_out_cfu(struct char_file_u *chdata) {
 * @return bool TRUE if the member has timed out and should not be counted; FALSE if they're ok.
 */
 bool member_is_timed_out_ch(char_data *ch) {
-	return member_is_timed_out(ch->player.time.birth, ch->player.time.logon, ch->player.time.played / SECS_PER_REAL_HOUR);
+	return member_is_timed_out(ch->player.time.birth, ch->player.time.logon, ((double)ch->player.time.played) / SECS_PER_REAL_HOUR);
 }
 
 
@@ -1579,6 +1612,7 @@ void read_empire_members(empire_data *only_empire, bool read_techs) {
 			EMPIRE_MEMBERS(emp) = 0;
 			EMPIRE_GREATNESS(emp) = 0;
 			EMPIRE_TOTAL_PLAYTIME(emp) = 0;
+			EMPIRE_LAST_LOGON(emp) = 0;
 		}
 	}
 

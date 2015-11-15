@@ -64,7 +64,7 @@ You can use 'tomb' to set your burial place.
 You can see recent empire logs with the 'elog' command.
 You can set up trade using the 'import' and 'export' commands.
 You get better exchange rates with empires that you have treaties with.
-You can type 'toggle scrolling to get rid of the paged text display.
+You can type 'toggle scrolling' to get rid of the paged text display.
 You can level Trade all the way to 15 by chipping, tanning, or weaving, before buying any abilities.
 You can level Survival all the way to 15 by digging or gathering, before buying any abilities.
 If you find some channels hard to see, try using 'recolor'.
@@ -78,7 +78,7 @@ You can 'consider' enemies to see how hard they'd be.
 Gear makes up a significant portion of your level.
 Type 'keep' to keep yourself from dropping certain items with 'drop all'.
 Some items are marked (boe), or bind-on-equip. Once you use them, you can't give them away.
-You'll need All-Terrain Riding to use a flying mount.
+You'll need All-Terrain Riding (or Dragonriding) to use a flying mount.
 You can hold a small weapon in your off-hand, but you need Dual Wield to fight with it.
 You can use 'alternate' to quickly switch between your characters.
 Type 'portal -all' to see a list of public portals.
@@ -88,7 +88,7 @@ Type 'elog' to see a list of recent empire events.
 You can use the 'eedit' command to configure your empire.
 Type 'cooldowns' to see how long until your abilities are available.
 Players with less than 24 hours of playtime can't be attacked by other players, unless they are hostile.
-You get a class when two skills hit level 76, but won't get class abilities until they are at 100.
+You get a class when two skills hit level 76, but won't get class abilities until you hit skill level 100.
 You can identify items to see how good they are, or which is better.
 To identify an item in your inventory when you're wearing something with the same name, try 'id 1.item'.
 You can create new slash-channels with /join.

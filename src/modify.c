@@ -1,5 +1,5 @@
 /* ************************************************************************
-*   File: modify.c                                        EmpireMUD 2.0b1 *
+*   File: modify.c                                        EmpireMUD 2.0b3 *
 *  Usage: Run-time modification of game variables                         *
 *                                                                         *
 *  EmpireMUD code base by Paul Clarke, (C) 2000-2015                      *
@@ -21,7 +21,6 @@
 #include "comm.h"
 #include "mail.h"
 #include "boards.h"
-#include "books.h"
 #include "olc.h"
 
 
@@ -36,6 +35,7 @@
 #define PARSE_LIST_NORM		5
 #define PARSE_LIST_NUM		6
 #define PARSE_EDIT			7
+#define PARSE_LIST_COLOR	8
 
 /*
  * Defines for the action variable.
@@ -53,8 +53,8 @@ void show_string(descriptor_data *d, char *input);
 
 /* local functions */
 void smash_tilde(char *str);
-char *next_page(char *str);
-int count_pages(char *str);
+char *next_page(char *str, descriptor_data *desc);
+int count_pages(char *str, descriptor_data *desc);
 void paginate_string(char *str, descriptor_data *d);
 
 
@@ -164,9 +164,9 @@ void string_add(descriptor_data *d, char *str) {
 	if (!(*d->str)) {
 		if (strlen(str) + 3 > d->max_str) {
 			send_to_char("String too long - Truncated.\r\n", d->character);
-			strcpy(&str[d->max_str - 3], "\r\n");
 			CREATE(*d->str, char, d->max_str);
-			strcpy(*d->str, str);
+			strncpy(*d->str, str, d->max_str);
+			strcpy(*d->str + (d->max_str - 3), "\r\n");
 		}
 		else {
 			CREATE(*d->str, char, strlen(str) + 3);
@@ -174,8 +174,12 @@ void string_add(descriptor_data *d, char *str) {
 		}
 	}
 	else {
-		if (strlen(str) + strlen(*d->str) + 3 > d->max_str)
-			send_to_char("String too long. Last line skipped.\r\n", d->character);
+		if (strlen(str) + strlen(*d->str) + 3 > d->max_str) {
+			if (action == STRINGADD_OK) {
+				send_to_char("String too long. Last line skipped.\r\n", d->character);
+				return;	// No appending \r\n\0, but still let them save.
+			}
+		}
 		else {
 			RECREATE(*d->str, char, strlen(*d->str) + strlen(str) + 3);
 			strcat(*d->str, str);
@@ -188,9 +192,8 @@ void string_add(descriptor_data *d, char *str) {
 	
 	switch (action) {
 		case STRINGADD_ABORT:
-			// if (STATE(d) == CON_BOOKEDIT) {
 			// only if not mailing/board-writing
-			if ((d->mail_to <= 0) && (STATE(d) == CON_PLAYING || STATE(d) == CON_BOOKEDIT)) {
+			if ((d->mail_to <= 0) && STATE(d) == CON_PLAYING) {
 				free(*d->str);
 				*d->str = d->backstr;
 				d->backstr = NULL;
@@ -238,6 +241,8 @@ void string_add(descriptor_data *d, char *str) {
 					else {
 						*GET_ADMIN_NOTES(vict) = '\0';
 					}
+					
+					syslog(SYS_GC, GET_INVIS_LEV(d->character), TRUE, "GC: %s has edited notes for %s", GET_NAME(d->character), GET_NAME(vict));
 										
 					// save now
 					if (file) {
@@ -261,9 +266,13 @@ void string_add(descriptor_data *d, char *str) {
 				SEND_TO_Q("Edit aborted.\r\n", d);
 			}
 			
-			// d->str is always a copy
-			free(*d->str);
-			free(d->str);
+			// d->str is always a copy; may have been freed already
+			if (d->str && *d->str) {
+				free(*d->str);
+			}
+			if (d->str) {
+				free(d->str);
+			}
 			d->str = NULL;
 			
 			act("$n stops editing notes.", TRUE, d->character, 0, 0, TO_ROOM);
@@ -289,14 +298,6 @@ void string_add(descriptor_data *d, char *str) {
 				free(d->file_storage);
 			}
 			d->file_storage = NULL;
-		}
-		else if (STATE(d) == CON_BOOKEDIT) {
-			if (action == STRINGADD_ABORT) {
-				SEND_TO_Q("Edit aborted.\r\n", d);
-			}
-			
-			SEND_TO_Q("Press ENTER to return to the menu.\r\n", d);
-			d->bookedit->mode = BOOKEDIT_MENU;
 		}
 		else {
 			if (action != STRINGADD_ABORT) {
@@ -330,22 +331,32 @@ void string_add(descriptor_data *d, char *str) {
 * for CircleMUD.  All functions below are his.  --JE 8 Mar 96
 *********************************************************************/
 
+// fallback defaults if these numbers can't be detected
 #define PAGE_LENGTH     22
 #define PAGE_WIDTH      80
 
-/* Traverse down the string until the begining of the next page has been
- * reached.  Return NULL if this is the last page of the string.
- */
-char *next_page(char *str) {
+/**
+* Traverse down the string until the begining of the next page has been
+* reached.  Return NULL if this is the last page of the string.
+*
+* @param char *str The string to get the next page from.
+* @param descriptor_data *desc The descriptor who will receive it (may have their own page size).
+* @return char* The next page.
+*/
+char *next_page(char *str, descriptor_data *desc) {
 	int col = 1, line = 1, spec_code = FALSE;
+	int length, width;
+	
+	length = (desc && desc->pProtocol->ScreenHeight > 0) ? (desc->pProtocol->ScreenHeight - 2) : PAGE_LENGTH;
+	width = (desc && desc->pProtocol->ScreenWidth > 0) ? desc->pProtocol->ScreenWidth : PAGE_WIDTH;
 
-	for (;; str++) {
+	for (;; ++str) {
 		/* If end of string, return NULL. */
 		if (*str == '\0')
 			return (NULL);
 
 		/* If we're at the start of the next page, return this fact. */
-		else if (line > PAGE_LENGTH)
+		else if (line > length)
 			return (str);
 
 		/* Check for the begining of an ANSI color code block. */
@@ -355,6 +366,14 @@ char *next_page(char *str) {
 		/* Check for the end of an ANSI color code block. */
 		else if (*str == 'm' && spec_code)
 			spec_code = FALSE;
+		
+		// skip & colorcodes
+		else if (*str == '&') {
+			++str;
+			if (*str == '&') {	// cause it to print a & in case of &&
+				--str;
+			}
+		}
 
 		/* Check for everything else. */
 		else if (!spec_code) {
@@ -369,7 +388,7 @@ char *next_page(char *str) {
 			 * We need to check here and see if we are over the page width,
 			 * and if so, compensate by going to the beginning of the next line.
 			 */
-			else if (col++ > PAGE_WIDTH) {
+			else if (col++ > width) {
 				col = 1;
 				line++;
 			}
@@ -378,11 +397,17 @@ char *next_page(char *str) {
 }
 
 
-/* Function that returns the number of pages in the string. */
-int count_pages(char *str) {
+/**
+* Function that returns the number of pages in the string.
+*
+* @param char *str The string to count pages in.
+* @param descriptor_data *desc The descriptor who will receive it (may have their own page size).
+* @return int The number of pages.
+*/
+int count_pages(char *str, descriptor_data *desc) {
 	int pages;
 
-	for (pages = 1; (str = next_page(str)); pages++);
+	for (pages = 1; (str = next_page(str, desc)); pages++);
 	return (pages);
 }
 
@@ -399,7 +424,7 @@ void paginate_string(char *str, descriptor_data *d) {
 		*(d->showstr_vector) = str;
 
 	for (i = 1; i < d->showstr_count && str; i++)
-		str = d->showstr_vector[i] = next_page(str);
+		str = d->showstr_vector[i] = next_page(str, d);
 
 	d->showstr_page = 0;
 }
@@ -418,7 +443,7 @@ void page_string(descriptor_data *d, char *str, int keep_internal) {
 		return;
 	}
 
-	d->showstr_count = count_pages(str);
+	d->showstr_count = count_pages(str, d);
 	CREATE(d->showstr_vector, char *, d->showstr_count);
 
 	if (keep_internal) {
@@ -563,6 +588,13 @@ int improved_editor_execute(descriptor_data *d, char *str) {
 			else
 				SEND_TO_Q("Current buffer empty.\r\n", d);
 			break;
+		case 'm': {
+			if (d->str && *d->str)
+				parse_action(PARSE_LIST_COLOR, actions, d);
+			else
+				SEND_TO_Q("Current buffer empty.\r\n", d);
+			break;
+		}
 		case 'n':
 			if (d->str && *d->str)
 				parse_action(PARSE_LIST_NUM, actions, d);
@@ -614,6 +646,7 @@ void parse_action(int command, char *string, descriptor_data *d) {
 				"/fi        - formats text and indents\r\n"
 				"/i# <text> - inserts <text> before line #\r\n"
 				"/l         - lists the buffer\r\n"
+				"/m         - lists the buffer with color\r\n"
 				"/n         - lists the buffer with line numbers\r\n"
 				"/r 'a' 'b' - replaces 1st occurrence of <a> with <b>\r\n"
 				"/ra 'a' 'b'- replaces all occurrences of <a> with <b>\r\n"
@@ -662,11 +695,13 @@ void parse_action(int command, char *string, descriptor_data *d) {
 			}
 			else if ((total_len = ((strlen(t) - strlen(s)) + strlen(*d->str))) <= d->max_str) {
 				if ((replaced = replace_str(d->str, s, t, rep_all, d->max_str)) > 0) {
-					sprintf(buf, "Replaced %d occurrence%sof '%s' with '%s'.\r\n", replaced, replaced != 1 ? "s " : " ", s, t);
+					char temp[MAX_STRING_LENGTH];
+					strcpy(temp, show_color_codes(t));
+					sprintf(buf, "Replaced %d occurrence%sof '%s' with '%s'.\r\n", replaced, replaced != 1 ? "s " : " ", show_color_codes(s), temp);
 					SEND_TO_Q(buf, d);
 				}
 				else if (replaced == 0) {
-					 sprintf(buf, "String '%s' not found.\r\n", s);
+					 sprintf(buf, "String '%s' not found.\r\n", show_color_codes(s));
 					 SEND_TO_Q(buf, d);
 				 }
 				else
@@ -730,7 +765,8 @@ void parse_action(int command, char *string, descriptor_data *d) {
 				return;
 			}
 			break;
-		case PARSE_LIST_NORM:
+		case PARSE_LIST_NORM:	// pass-thru
+		case PARSE_LIST_COLOR: {
 			*buf = '\0';
 			if (*string)
 				switch(sscanf(string, " %d - %d ", &line_low, &line_high)) {
@@ -786,8 +822,9 @@ void parse_action(int command, char *string, descriptor_data *d) {
 			else
 				strcat(buf, t);
 			sprintf(buf + strlen(buf), "\r\n%d line%sshown.\r\n", total_len, total_len != 1 ? "s " : " ");
-			page_string(d, show_color_codes(buf), TRUE);
+			page_string(d, (command == PARSE_LIST_COLOR) ? buf : show_color_codes(buf), TRUE);
 			break;
+		}
 		case PARSE_LIST_NUM:
 			*buf = '\0';
 			if (*string)
@@ -1044,7 +1081,7 @@ int format_script(struct descriptor_data *d) {
 
 
 void format_text(char **ptr_string, int mode, descriptor_data *d, unsigned int maxlen) {
-	int line_chars, cap_next = TRUE, cap_next_next = FALSE;
+	int line_chars, startlen, cap_next = TRUE, cap_next_next = FALSE;
 	char *flow, *start = NULL, temp;
 	char formatted[MAX_STRING_LENGTH];
 
@@ -1090,7 +1127,8 @@ void format_text(char **ptr_string, int mode, descriptor_data *d, unsigned int m
 			temp = *flow;
 			*flow = '\0';
 
-			if (line_chars + strlen(start) + 1 > 79) {
+			startlen = strlen(start) - (2 * count_color_codes(start));
+			if (line_chars + startlen + 1 > 79) {
 				strcat(formatted, "\r\n");
 				line_chars = 0;
 			}
@@ -1104,7 +1142,7 @@ void format_text(char **ptr_string, int mode, descriptor_data *d, unsigned int m
 				cap_next = FALSE;
 				*start = UPPER(*start);
 			}
-			line_chars += strlen(start);
+			line_chars += startlen;
 			strcat(formatted, start);
 			*flow = temp;
 		}

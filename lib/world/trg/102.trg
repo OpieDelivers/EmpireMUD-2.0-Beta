@@ -1,6 +1,6 @@
 #10200
 Goblin Challenge Must Fight~
-0 q 100
+0 s 100
 ~
 %send% %actor% You have begun the Goblin Challenge and cannot leave without fighting %self.name%.
 return 0
@@ -169,6 +169,7 @@ Furl Death Rarespawn~
 ~
 %echo% As Furl dies, you notice his trusty mount enter the nest!
 %load% mob 10206
+%adventurecomplete%
 ~
 #10216
 Filks Respawn~
@@ -510,7 +511,7 @@ mkill %actor%
 ~
 #10262
 Primeval must-fight~
-0 q 100
+0 s 100
 ~
 if (%actor.nohassle% || %direction% == south)
   halt
@@ -849,7 +850,7 @@ if !%actor.can_afford(1000)%
 end
 nop %actor.charge_coins(1000)%
 %load% obj %vnum% %actor% inv
-%send% %actor% You buy %named% for 1000 coins
+%send% %actor% You buy %named% for 1000 coins.
 %echoaround% %actor% %actor.name% buys %named%.
 ~
 #10274

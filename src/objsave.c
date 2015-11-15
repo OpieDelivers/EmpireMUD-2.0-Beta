@@ -1,5 +1,5 @@
 /* ************************************************************************
-*   File: objsave.c                                       EmpireMUD 2.0b1 *
+*   File: objsave.c                                       EmpireMUD 2.0b3 *
 *  Usage: loading/saving player objects for rent and crash-save           *
 *                                                                         *
 *  EmpireMUD code base by Paul Clarke, (C) 2000-2015                      *
@@ -25,6 +25,7 @@
 #include "db.h"
 #include "interpreter.h"
 #include "utils.h"
+#include "dg_scripts.h"
 
 /**
 * Contents:
@@ -75,12 +76,22 @@ void ensure_safe_obj(obj_data *obj) {
 }
 
 
-// formerly obj_from_store
-obj_data *Obj_load_from_file(FILE *fl, obj_vnum vnum, int *location) {	
+/**
+* formerly obj_from_store
+*
+* @param FILE *fl The open item file.
+* @param obj_vnum vnum The vnum of the item being loaded, or NOTHING for non-prototyped item.
+* @param int *location A place to bind the current WEAR_x position of the item; also used to track container contents.
+* @param char_data *notify Optional: A person to notify if an item is updated (NULL for none).
+* @return obj_data* The loaded item, or NULL if it's not available.
+*/
+obj_data *Obj_load_from_file(FILE *fl, obj_vnum vnum, int *location, char_data *notify) {
+	void scale_item_to_level(obj_data *obj, int level);
+
 	char line[MAX_INPUT_LENGTH], error[MAX_STRING_LENGTH], s_in[MAX_INPUT_LENGTH];
 	obj_data *proto = obj_proto(vnum);
 	struct extra_descr_data *ex;
-	obj_data *obj;
+	obj_data *obj, *new;
 	bool end = FALSE;
 	int length, i_in[3];
 	int l_in;
@@ -91,7 +102,7 @@ obj_data *Obj_load_from_file(FILE *fl, obj_vnum vnum, int *location) {
 	
 	// load based on vnum or, if NOTHING, create anonymous object
 	if (proto) {
-		obj = read_object(vnum);
+		obj = read_object(vnum, FALSE);
 	}
 	else {
 		// what we do here depends on input ... if the vnum was real, but no proto, it's a deleted obj
@@ -102,6 +113,11 @@ obj_data *Obj_load_from_file(FILE *fl, obj_vnum vnum, int *location) {
 			obj = NULL;
 			seek_end = TRUE;	// signal it to skip obj data
 		}
+	}
+	
+	// default to version 0
+	if (obj) {
+		OBJ_VERSION(obj) = 0;
 	}
 	
 	// for fread_string
@@ -123,6 +139,11 @@ obj_data *Obj_load_from_file(FILE *fl, obj_vnum vnum, int *location) {
 			// are we looking for the end of the object? ignore this line
 			// WARNING: don't put any ifs that require "obj" above seek_end; obj is not guaranteed
 			continue;
+		}
+		else if (OBJ_FILE_TAG(line, "Version:", length)) {
+			if (sscanf(line + length + 1, "%d", &i_in[0])) {
+				OBJ_VERSION(obj) = i_in[0];
+			}
 		}
 		else if (OBJ_FILE_TAG(line, "Location:", length)) {
 			if (sscanf(line + length + 1, "%d", &i_in[0]) == 1) {
@@ -260,6 +281,14 @@ obj_data *Obj_load_from_file(FILE *fl, obj_vnum vnum, int *location) {
 				OBJ_BOUND_TO(obj) = bind;
 			}
 		}
+		else if (OBJ_FILE_TAG(line, "Trigger:", length)) {
+			if (sscanf(line + length + 1, "%d", &i_in[0]) && real_trigger(i_in[0])) {
+				if (!SCRIPT(obj)) {
+					CREATE(SCRIPT(obj), struct script_data, 1);
+				}
+				add_trigger(SCRIPT(obj), read_trigger(i_in[0]), -1);
+			}
+		}
 		
 		// ignore anything else
 		else {
@@ -267,8 +296,20 @@ obj_data *Obj_load_from_file(FILE *fl, obj_vnum vnum, int *location) {
 		}
 	}
 	
+	// we were not guaranteed an object
 	if (obj) {
 		ensure_safe_obj(obj);
+	}
+	
+	// check versioning: load a new version
+	if (obj && proto && OBJ_VERSION(obj) < OBJ_VERSION(proto) && config_get_bool("auto_update_items")) {
+		new = fresh_copy_obj(obj, GET_OBJ_CURRENT_SCALE_LEVEL(obj));		
+		extract_obj(obj);
+		obj = new;
+		
+		if (notify && notify->desc) {
+			msg_to_char(notify, "&yItem '%s' updated.&0\r\n", GET_OBJ_SHORT_DESC(obj));
+		}
 	}
 	
 	return obj;
@@ -313,7 +354,12 @@ int Objload_char(char_data *ch, int dolog) {
 		if (dolog) {
 			syslog(SYS_LOGIN, GET_INVIS_LEV(ch), TRUE, "%s entering game with no equipment.", GET_NAME(ch));
 			if (GET_INVIS_LEV(ch) == 0) {
-				mortlog("%s has entered the game", PERS(ch, ch, 1));
+				if (config_get_bool("public_logins")) {
+					mortlog("%s has entered the game", PERS(ch, ch, TRUE));
+				}
+				else if (GET_LOYALTY(ch)) {
+					log_to_empire(GET_LOYALTY(ch), ELOG_LOGINS, "%s has entered the game", PERS(ch, ch, TRUE));
+				}
 			}
 		}
 		return (1);
@@ -337,7 +383,7 @@ int Objload_char(char_data *ch, int dolog) {
 				return (1);
 			}
 			
-			if ((obj = Obj_load_from_file(fl, vnum, &location))) {
+			if ((obj = Obj_load_from_file(fl, vnum, &location, ch))) {
 				// Obj_load_from_file may return a NULL for deleted objs
 				
 				auto_equip(ch, obj, &location);
@@ -513,7 +559,12 @@ int Objload_char(char_data *ch, int dolog) {
 	
 	// mortlog
 	if (dolog && GET_INVIS_LEV(ch) == 0) {
-		mortlog("%s has entered the game", PERS(ch, ch, TRUE));
+		if (config_get_bool("public_logins")) {
+			mortlog("%s has entered the game", PERS(ch, ch, TRUE));
+		}
+		else if (GET_LOYALTY(ch)) {
+			log_to_empire(GET_LOYALTY(ch), ELOG_LOGINS, "%s has entered the game", PERS(ch, ch, TRUE));
+		}
 	}
 
 	fclose(fl);
@@ -581,6 +632,7 @@ void Crash_save_one_obj_to_file(FILE *fl, obj_data *obj, int location) {
 	proto = obj_proto(GET_OBJ_VNUM(obj));
 	
 	fprintf(fl, "#%d\n", GET_OBJ_VNUM(obj));
+	fprintf(fl, "Version: %d\n", OBJ_VERSION(obj));	// for auto-updating
 	
 	if (location != 0) {
 		fprintf(fl, "Location: %d\n", location);
@@ -649,7 +701,7 @@ void Crash_save_one_obj_to_file(FILE *fl, obj_data *obj, int location) {
 	if (obj->last_owner_id != NOBODY) {
 		fprintf(fl, "Last-owner: %d\n", obj->last_owner_id);
 	}
-	if (time(0) - obj->stolen_timer < config_get_int("stolen_object_timer") * SECS_PER_REAL_MIN) {
+	if (IS_STOLEN(obj)) {
 		fprintf(fl, "Stolen-timer: %d\n", (int) obj->stolen_timer);
 	}
 	if (GET_AUTOSTORE_TIMER(obj) > 0) {
@@ -664,6 +716,17 @@ void Crash_save_one_obj_to_file(FILE *fl, obj_data *obj, int location) {
 	// who it's bound to
 	for (bind = OBJ_BOUND_TO(obj); bind; bind = bind->next) {
 		fprintf(fl, "Bound-to: %d\n", bind->idnum);
+	}
+	
+	// scripts
+	if (SCRIPT(obj)) {
+		trig_data *trig;
+		
+		for (trig = TRIGGERS(SCRIPT(obj)); trig; trig = trig->next) {
+			fprintf(fl, "Trigger: %d\n", GET_TRIG_VNUM(trig));
+		}
+		
+		// TODO could save SCRIPT(obj)->global_vars here too
 	}
 	
 	fprintf(fl, "End\n");
@@ -879,7 +942,7 @@ void objpack_load_room(room_data *room) {
 				return;
 			}
 			
-			if ((obj = Obj_load_from_file(fl, vnum, &location))) {
+			if ((obj = Obj_load_from_file(fl, vnum, &location, NULL))) {
 				// Obj_load_from_file may return a NULL for deleted objs
 				
 				// Not really an inventory, but same idea.

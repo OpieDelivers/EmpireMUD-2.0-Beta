@@ -4,17 +4,13 @@ a leather breastplate~
 A leather breastplate is lying on the ground.~
 This simple piece of hardened leather is light weight and offers good mobility.
 ~
-27 emo aq
+27 emo aq 1
 1 0 0
 7 0
 A
 17 1
 A
 2 1
-A
-12 1
-C
-0 0
 S
 #2301
 helm leather~
@@ -22,15 +18,13 @@ a leather helm~
 An empty leather helm is lying here.~
 The hardened leather helm looks like it might be from the militia.
 ~
-27 mo ae
+27 mo ae 1
 1 0 0
 7 0
 A
 17 1
 A
-12 1
-C
-0 0
+9 1
 S
 #2302
 vambraces leather pair~
@@ -38,13 +32,13 @@ leather vambraces~
 A pair of leather vambraces are lying on the ground.~
 These vambraces are meant to protect the arms in combat..
 ~
-27 mo ai
+27 mo ai 1
 1 0 0
 7 0
 A
 17 1
 A
-12 1
+1 1
 C
 0 75
 S
@@ -56,17 +50,13 @@ A suit of scale armor is lying on the ground.~
 light, swift armor. It offers only modest protection, but allows its wearer
 free movement.
 ~
-27 emo aq
+27 emo aq 1
 1 0 0
 7 0
 A
 17 1
 A
-18 1
-A
-12 1
-C
-0 0
+2 1
 S
 #2304
 helm viper~
@@ -75,17 +65,13 @@ A viper helm is lying on the ground.~
    This helmet is made from reinforced leather bands, each with a consummate 'v'
 shape that gives the whole helmet a snake-like appearance.
 ~
-27 mo ae
+27 mo ae 1
 1 0 0
 7 0
 A
 17 1
 A
-18 1
-A
-12 1
-C
-0 0
+9 1
 S
 #2305
 vambraces shark skin pair~
@@ -94,17 +80,13 @@ A pair of shark skin vambraces are lying on the ground.~
    These mastercraft vambraces are plated in shark skin that allows them to be
 used to catch a weapon, or deflect it.
 ~
-27 mo ai
+27 mo ai 1
 1 0 0
 7 0
 A
 17 1
 A
-18 1
-A
-12 1
-C
-0 0
+1 1
 S
 #2306
 shoes leather pair~
@@ -113,13 +95,11 @@ A pair of leather shoes is standing here.~
    These shoes look like they're masterfully tailored for comfort and
 durability, as if you could walk twice as far in them.
 ~
-2 mo ag
+2 mo ag 1
 0 0 0
 7 0
 A
 11 1
-C
-0 0
 S
 #2307
 boots leather pair~
@@ -127,15 +107,13 @@ leather boots~
 A pair of leather boots is standing here.~
 These boots look extremely comfortable.
 ~
-2 mo ag
+2 mo ag 1
 0 0 0
 7 0
 A
 11 1
 A
 17 1
-C
-0 0
 S
 #2308
 hauberk mail~
@@ -144,15 +122,13 @@ A mail hauberk is piled on the ground.~
    The hauberk is a shirt of mail, the first line of defense in battle. It's
 heavy, but you would regret not wearing one.
 ~
-27 emo aq
+27 emo aq 1
 2 0 0
 2 0
 A
-9 -2
+18 1
 A
-12 2
-C
-0 0
+17 1
 S
 #2309
 coif mail~
@@ -161,30 +137,32 @@ A mail coif is lying here.~
    The coif is a reinforced head covering meant to stop the impact of cutting
 weapons against your precious skull.
 ~
-27 mo ae
+27 mo ae 1
 2 0 0
 2 0
 A
-9 -2
+18 1
 A
-12 2
-C
-0 0
+17 1
+A
+2 1
 S
 #2310
 vambraces pair splint~
 splint vambraces~
-A pair of split vambraces are lying here.~
+A pair of splint vambraces are lying here.~
    These strong vambraces are heavy, but they do an amazing job of protecting
 your forearms from enemy weaponry.
 ~
-27 mo ai
+27 mo ai 2
 2 0 0
 2 0
 A
-9 -2
+18 1
 A
-12 2
+17 1
+A
+2 1
 C
 0 75
 S
@@ -195,15 +173,13 @@ Someone has discarded a cuirass here.~
    The cuirass is a strong plate of armor that protects the torso in melee
 combat. Its smooth finish helps deflect the damage from any attack.
 ~
-27 mo aq
+27 mo aq 1
 2 0 0
 2 0
 A
-9 -2
+18 1
 A
-12 1
-C
-0 0
+17 1
 S
 #2312
 helm eagle eagle-shaped~
@@ -213,17 +189,15 @@ An eagle-shaped helm is lying on the ground.~
 The sloping sides are designed to deflect glancing blows, and the magnificent
 beak strikes fear in your enemies.
 ~
-27 mo ae
+27 mo ae 1
 2 0 0
 2 0
 A
-9 -2
+2 1
 A
-12 1
+17 1
 A
 18 1
-C
-0 0
 S
 #2313
 vambraces spiked pair~
@@ -232,17 +206,15 @@ A pair of spiked vambraces is lying here.~
    These vambraces have spikes that look like they might be meant to catch a
 sword. Some of the spikes are already broken -- ablated off in battle, perhaps.
 ~
-27 mo ai
+27 mo ai 1
 2 0 0
 2 0
 A
-9 -2
+2 1
 A
-12 1
+18 1
 A
-13 1
-C
-0 0
+17 1
 S
 #2314
 buckler leather~
@@ -252,13 +224,11 @@ A leather buckler is lying on the ground.~
 off-hand. It's made of hardened leather and is very light compared to a metal
 shield.
 ~
-23 emo ao
+23 emo ao 1
 0 0 0
 7 0
 A
 13 1
-C
-0 0
 S
 #2315
 shield kite~
@@ -266,7 +236,7 @@ a kite shield~
 A kite shield is lying here.~
 The kite shield is as common as the miller's daughter.
 ~
-23 emo ao
+23 emo ao 1
 0 0 0
 2 0
 A
@@ -280,13 +250,11 @@ a ram shield~
 A ram-shaped tower shield is lying here.~
 This shield is strong, sturdy, and molded to look like a ram's head.
 ~
-23 emo ao
+23 emo ao 1
 0 0 0
 2 0
 A
 13 1
-C
-0 0
 S
 #2317
 plate armor suit~
@@ -297,7 +265,7 @@ offers superior protection to those who can lift it. A suit like this
 distinguishes even the least of men, and the greatest of them conquer from
 inside it.
 ~
-27 emo aq
+27 emo aq 1
 3 0 0
 2 0
 A
@@ -305,11 +273,11 @@ A
 A
 1 -1
 A
-12 4
+18 1
 A
-13 5
-C
-0 0
+13 1
+A
+15 2
 S
 #2318
 helm great~
@@ -319,19 +287,17 @@ A great helm is lying on the ground.~
 bearer. The front is emblazoned with your sigil so that the sons of your foes
 know who to swear vengeance against.
 ~
-27 emo ae
+27 emo ae 1
 3 0 0
 2 0
 A
 9 -2
 A
-1 -1
+2 1
 A
-12 3
+12 1
 A
-13 5
-C
-0 0
+15 2
 S
 #2319
 cannons lower pair~
@@ -340,19 +306,17 @@ A pair of lower cannons are lying on the ground.~
    Lower cannons is what they call a powerful set of vambraces. These arm
 guards are unmatched in the land.
 ~
-27 emo ai
+27 emo ai 1
 3 0 0
 2 0
 A
 9 -2
 A
-1 -1
+13 2
 A
-12 3
+12 1
 A
-13 5
-C
-0 0
+15 2
 S
 #2320
 shield clay~
@@ -362,13 +326,11 @@ A clay shield is lying here.~
 some protection. It has been reinforced with wood to protect against the
 inevitable cracks.
 ~
-23 emo ao
+23 emo ao 1
 0 0 0
 6 0
 A
 13 1
-C
-0 0
 S
 #2321
 robe sorcerer's sorcerers~
@@ -378,15 +340,15 @@ A sorcerer's robe is lying here.~
 embraced the power of magic. City sorcerers can often be seen wearing this
 color, as a warning to those who would cross them.
 ~
-27 mo aq
+27 mo aq 1
 0 0 0
 7 0
 A
 16 2
 A
 8 1
-C
-0 0
+A
+12 -1
 S
 #2322
 hat wizard's wizards~
@@ -396,32 +358,32 @@ A wizard's hat has been left here.~
 focuses magic better than flatter hat styles. The hat itself is light weight,
 but when you wear it you begin to see things in a whole new way.
 ~
-27 mo ae
+27 mo ae 1
 0 0 0
 7 0
 A
 7 1
 A
 16 1
-C
-0 0
+A
+12 -1
 S
 #2323
 armbands power unusual pair~
 armbands of power~
 A pair of unusual armbands is lying here.~
    These armbands, sewn from intricately woven and stained cloth, emanate a
-strange, peaceful feelign as you touch them.
+strange, peaceful feeling as you touch them.
 ~
-27 mo ai
+27 mo ai 2
 0 0 0
 7 0
 A
 16 1
 A
 17 1
-C
-0 0
+A
+12 -1
 S
 #2324
 breastplate copper~
@@ -429,15 +391,13 @@ a copper breastplate~
 A copper breastplate is lying here.~
 The copper breastplate has molded abs!
 ~
-27 emo aq
+27 emo aq 1
 2 0 0
 13 0
 A
-9 -1
+18 1
 A
-12 2
-C
-0 0
+17 1
 S
 #2325
 mask copper~
@@ -445,15 +405,13 @@ a copper mask~
 A copper mask has been left here.~
 The mask looks like it would protect the face from blows.
 ~
-27 mo ae
+27 mo ae 1
 2 0 0
 13 0
 A
-9 -1
+17 1
 A
-12 2
-C
-0 0
+18 1
 S
 #2326
 vambraces pair copper~
@@ -462,15 +420,13 @@ A pair of copper vambraces is lying here.~
    These strong vambraces are heavy, but they do an amazing job of protecting
 your forearms from enemy weaponry.
 ~
-27 mo ai
+27 mo ai 1
 2 0 0
 13 0
 A
-9 -1
+18 1
 A
-12 2
-C
-0 0
+17 1
 S
 #2327
 buckler copper~
@@ -478,13 +434,11 @@ a copper buckler~
 A copper buckler is lying here.~
 The copper buckler is quite common around here.
 ~
-23 emo ao
+23 emo ao 1
 0 0 0
 13 0
 A
 13 1
-C
-0 0
 S
 #2328
 breastplate rawhide~
@@ -492,15 +446,13 @@ a rawhide breastplate~
 A rawhide breastplate is lying here.~
 This simple piece of hardened rawhide is light weight and offers good mobility.
 ~
-27 emo aq
+27 emo aq 1
 1 0 0
 7 0
 A
 17 1
 A
-12 1
-C
-0 0
+2 1
 S
 #2329
 skullcap cap rawhide~
@@ -508,15 +460,13 @@ a rawhide skullcap~
 A rawhide skullcap is lying on the ground.~
 The skullcap is made from fine rawhide.
 ~
-27 mo ae
+27 mo ae 1
 1 0 0
 7 0
 A
 17 1
 A
-12 1
-C
-0 0
+9 1
 S
 #2330
 bracers rawhide pair~
@@ -524,15 +474,13 @@ rawhide bracers~
 A pair of rawhide bracers is lying here.~
 These bracers should protect your arms in combat.
 ~
-27 mo ai
+27 mo ai 1
 1 0 0
 7 0
 A
 17 1
 A
-12 1
-C
-0 0
+1 1
 S
 #2331
 boots rawhide pair~
@@ -540,13 +488,11 @@ rawhide boots~
 A pair of rawhide boots is sitting here.~
 These boots look sturdy, but not terribly strong.
 ~
-2 mo ag
+2 mo ag 1
 0 0 0
 7 0
 A
 11 1
-C
-0 0
 S
 #2332
 knapsack napsack sack rawhide~
@@ -554,11 +500,9 @@ a rawhide knapsack~
 A rawhide knapsack is lying on the ground.~
 Equip the knapsack to increase your carrying capacity.
 ~
-24 mo ar
+24 mo ar 1
 1 0 0
 7 0
-C
-0 0
 S
 #2333
 hat conical~
@@ -568,13 +512,11 @@ A conical hat is sticking out of the ground.~
 focuses magic better than flatter hat styles. The hat itself is light weight,
 but when you wear it you begin to see things in a whole new way.
 ~
-27 mo ae
+27 mo ae 1
 0 0 0
 7 0
 A
 16 1
-C
-0 0
 S
 #2334
 sleeves furrowed~
@@ -582,13 +524,11 @@ furrowed sleeves~
 A pair of furrowed sleeves is lying on the ground.~
 These sleeves are made from fur, furrowed into rows.
 ~
-27 mo ai
+27 mo ai 1
 0 0 0
 7 0
 A
 16 1
-C
-0 0
 S
 #2335
 shoes apprentice pair~
@@ -596,15 +536,13 @@ apprentice shoes~
 A pair of apprentice shoes has been left here.~
 These shoes have all the whispers of magic.
 ~
-2 mo ag
+2 mo ag 1
 0 0 0
 7 0
 A
 16 1
 A
 17 1
-C
-0 0
 S
 #2336
 sandals earth-hewn hewn earthhewn~
@@ -612,15 +550,13 @@ earth-hewn sandals~
 A pair of earth-hewn sandals are partially buried here.~
 These sandals are infused with the power of the earth.
 ~
-2 mo ag
+2 mo ag 1
 0 0 0
 7 0
 A
 8 1
 A
 16 2
-C
-0 0
 S
 #2337
 pouch magewhisper~
@@ -628,13 +564,11 @@ a magewhisper pouch~
 A magewhisper pouch is lying here.~
 Equip the pouch to increase your carrying capacity.
 ~
-24 mo ar
+24 mo ar 1
 2 0 0
 7 0
 A
 7 1
-C
-0 0
 S
 #2338
 shield viper~
@@ -644,12 +578,315 @@ A viper shield has been left here.~
 off-hand. It's made of hardened leather and is very light compared to a metal
 shield.
 ~
-23 emo ao
+23 emo ao 1
 0 0 0
 7 0
 A
 13 1
+S
+#2339
+goggles clockwork pair~
+clockwork goggles~
+A pair of clockwork goggles are lying here.~
+   Fitted with several lenses for different distances and magnifications, these
+goggles make precision craftsmanship much easier. And protect your eyes.
+~
+2 p ae 8
+0 0 0
+8 0
+A
+25 25
 C
+100 100
+S
+#2340
+tunic guildmasters guildmaster's~
+a guildmaster's tunic~
+A guildmaster has left his tunic here.~
+   This tunic is finely embroidered with the symbol of a craftsman's guild on
+the front. It is also fireproof, and resists stains.
+~
+2 p ad 7
+0 0 0
+11 0
+A
+25 25
+C
+100 100
+S
+#2341
+belt utility~
+a utility belt~
+A utility belt has been discarded here.~
+   This sturdy leather belt is specially designed to let you keep your own
+weight in tools within your reach while keeping both hands free.
+~
+2 p al 8
+0 0 0
+7 0
+A
+25 25
+C
+100 100
+S
+#2342
+multitool folding steel~
+a steel multitool~
+An folding steel multitool is lying here.~
+   This amazing multi-purpose folding tool has attachments for almost every
+conceivable purpose. It even has a corkscrew!
+~
+3 p ao 7
+0 0 0
+2 0
+A
+25 25
+C
+100 100
+S
+#2343
+lenses clockwork array~
+a clockwork lens array~
+An array of clockwork lenses is lying here.~
+These can be used by any craftsman to make a personal set of clockwork goggles.
+
+Craft (no skill required): clockwork goggles
+  1x clockwork lens array
+  2x copper ingot
+~
+3 0 a 4
+0 0 0
+8 0
+S
+#2344
+sheet cloth guild-patterned patterned~
+guild-patterned cloth~
+A sheet of guild-patterned cloth is lying here.~
+This can be used by any craftsman to make a personal guildmaster's tunic.
+
+Sew (no skill required): guildmaster tunic
+  1x guild-patterned cloth
+  2x bolt of cloth
+~
+3 0 a 4
+0 0 0
+11 0
+S
+#2345
+buckles clips pile~
+some clips and buckles~
+A pile of clips and buckles is lying here.~
+These can be used by any craftsman to make a personal utility belt.
+
+Sew (no skill required): utility belt
+  1x clips and buckles
+  4x large leather
+~
+3 0 a 5
+0 0 0
+2 0
+S
+#2346
+tools delicate tiny set~
+a set of delicate tools~
+A set of tiny, delicate tools is lying here.~
+These can be used by any craftsman to make a personal artisan's multitool.
+
+Forge (no skill required): steel multitool
+  1x set of delicate tools
+  1x small leather
+  1x iron ingot
+~
+3 0 a 6
+0 0 0
+2 0
+S
+#2347
+pattern filter alchemical~
+the alchemical filter pattern~
+The alchemical filter pattern is lying here.~
+An alchemist could use this pattern to create an alchemical filter, used in the
+creation of a chemist's cleansing cap, a level 200-300 crafting headpiece.
+
+Craft (requires Alchemist Crafts and crafting 200): alchemical filter
+  2x nocturnium ingot
+  2x each of the 6 herbs:
+    whitegrass, fiveleaf, redthorn, magewhisper, daggerbite, bileberries
+~
+3 0 a 7
+0 0 0
 0 0
+S
+#2348
+design device antiquated~
+the antiquated device design~
+The antiquated device design is lying here.~
+An an antiquarian could use this design to create antique device parts, used to
+make antiquated arcane apparatus, a level 200-300 crafting offhand.
+
+Forge (requires Antiquarian Crafts and crafting 200): antique device parts
+  8x silver nugget
+  4x copper ingot
+  2x gold dust
+~
+3 0 a 6
+0 0 0
+0 0
+S
+#2349
+pattern pouch concealed~
+the concealed pouch pattern~
+The concealed pouch pattern is lying here.~
+A smuggler could use this design to create concealed silk pouches, used in the
+creation of a superb smuggling sash, a level 200-300 crafting belt.
+
+Sew (requires Smuggler Crafts and crafting 200): concealed silk pouches
+  6x bolt of cloth
+  1x each of the 4 gems:
+    lightning stone, bloodstone, blue iris, glowing seashell
+~
+3 0 a 5
+0 0 0
+0 0
+S
+#2350
+pattern harness tinker's tinkers~
+the tinker's harness pattern~
+The tinker's harness pattern is lying here.~
+A tinker could use this pattern to create a tinker's harness, used to make
+traveling tinker's trappings, a set of level 200-300 crafting clothes.
+
+Forge (requires Tinker Crafts and crafting 200): tinker harness
+  8x iron ingot
+  2x imperium ingot
+  2x shark skin
+  2x snakeskin
+~
+3 0 a 4
+0 0 0
+0 0
+S
+#2351
+filter alchemical~
+an alchemical filter~
+An alchemical filter is lying here.~
+This alchemically treated metal filter is used in the construction of a
+chemist's cleansing cap. It will bind to whoever crafts it.
+
+Sew (requires crafting 200): chemists cleansing cap
+  1x alchemical filter
+  2x large leather
+~
+3 0 a 4
+0 0 0
+2 0
+S
+#2352
+parts device antique pile~
+a pile of antique device parts~
+A pile of antique device parts is lying here.~
+This pile of strange little gears and rods can be used to assemble an
+antiquated arcane apparatus. It will bind to whoever crafts it.
+
+Craft (requires crafting 200): antiquated arcane apparatus
+  1x antique device parts
+  1x gold dust
+  2x copper ingot
+~
+3 0 a 5
+0 0 0
+3 0
+S
+#2353
+pouches silk thing concealed~
+some concealed silk pouches~
+Some thin silk pouches are lying here.~
+This set of enchanted hidden pouches, clearly crafted by a master smuggler,
+could be sewn into a superb smuggling sash. It will bind to whoever crafts it.
+
+Sew (requires crafting 200): superb smuggling sash
+  1x concealed silk pouches
+  6x bolt of cloth
+~
+3 0 a 6
+0 0 0
+11 0
+S
+#2354
+harness tinker's tinkers detached~
+a tinker's harness~
+A detached tinker's harness is piled up here.~
+This collection of straps, buckles and clamps can be used to create traveling
+tinker's trappings. They will bind to whoever crafts them.
+
+Sew (requires crafting 200): traveling tinker's trappings
+  1x tinker's harness
+  4x bolt of cloth
+  2x large leather
+~
+3 0 a 10
+0 0 0
+2 0
+S
+#2355
+cap cleansing chemist's chemists~
+a chemist's cleansing cap~
+A chemist's cleansing cap lies discarded here.~
+   This stylish leather cap has a flip-down visor which doubles as an air
+purifier to protect you from noxious alchemical fumes!
+~
+2 p ae 11
+0 0 0
+7 0
+A
+25 50
+C
+150 150
+S
+#2356
+apparatus arcane antiquated~
+an antiquated arcane apparatus~
+An antiquated arcane apparatus lies forgotten here.~
+   This strange device, made in the image of an ancient relic, helps guide your
+movements while crafting.
+~
+2 p ao 6
+0 0 0
+3 0
+A
+25 50
+C
+150 150
+S
+#2357
+sash smuggling silk superb~
+a superb smuggling sash~
+A superb silk sash is lying here.~
+   This innocent-looking cloth belt has dozens and dozens of hidden pouches
+sewn into the inside of the fabric!
+~
+2 p al 5
+0 0 0
+11 0
+A
+25 50
+C
+150 150
+S
+#2358
+trappings tinker's tinkers traveling~
+a traveling tinker's trappings~
+A traveling tinker's trappings are lying here.~
+   This awkward-looking assembly of mechanical arms, clamps, and tiny tables
+attached to a traveler's outfit would probably let you work very efficiently
+on the move if you knew how to use it.
+~
+2 p ad 6
+0 0 0
+2 0
+A
+25 50
+C
+150 150
 S
 $

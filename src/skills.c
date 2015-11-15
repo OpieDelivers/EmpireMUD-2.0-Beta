@@ -1,5 +1,5 @@
 /* ************************************************************************
-*   File: skills.c                                        EmpireMUD 2.0b1 *
+*   File: skills.c                                        EmpireMUD 2.0b3 *
 *  Usage: code related to the skill and ability system                    *
 *                                                                         *
 *  EmpireMUD code base by Paul Clarke, (C) 2000-2015                      *
@@ -50,13 +50,12 @@ bool green_skill_deadend(char_data *ch, int skill);
 * @param int abil The ability to sell
 */
 void check_skill_sell(char_data *ch, int abil) {
+	bool despawn_familiar(char_data *ch, mob_vnum vnum);
 	void end_majesty(char_data *ch);
-	extern char_data *has_familiar(char_data *ch);
 	void remove_armor_by_type(char_data *ch, int armor_type);
 	void retract_claws(char_data *ch);
 	void undisguise(char_data *ch);	
 	
-	char_data *vict;
 	obj_data *obj;
 	bool found = TRUE;	// inverted detection, see default below
 	
@@ -74,6 +73,14 @@ void check_skill_sell(char_data *ch, int abil) {
 			}
 			break;
 		}
+		case ABIL_BANSHEE: {
+			despawn_familiar(ch, FAMILIAR_BANSHEE);
+			break;
+		}
+		case ABIL_BASILISK: {
+			despawn_familiar(ch, FAMILIAR_BASILISK);
+			break;
+		}
 		case ABIL_BAT_FORM: {
 			if (GET_MORPH(ch) == MORPH_BAT) {
 				perform_morph(ch, MORPH_NONE);
@@ -82,11 +89,15 @@ void check_skill_sell(char_data *ch, int abil) {
 		}
 		case ABIL_BLOODSWORD: {
 			if ((obj = GET_EQ(ch, WEAR_WIELD))) {
-				if (GET_OBJ_VNUM(obj) == o_BLOODSWORD_LOW || GET_OBJ_VNUM(obj) == o_BLOODSWORD_MEDIUM || GET_OBJ_VNUM(obj) == o_BLOODSWORD_HIGH || GET_OBJ_VNUM(obj) == o_BLOODSWORD_LEGENDARY) {
+				if (GET_OBJ_VNUM(obj) == o_BLOODSWORD) {
 					act("You stop using $p.", FALSE, ch, GET_EQ(ch, WEAR_WIELD), NULL, TO_CHAR);
-					unequip_char_to_inventory(ch, WEAR_WIELD, TRUE);
+					unequip_char_to_inventory(ch, WEAR_WIELD);
 				}
 			}
+			break;
+		}
+		case ABIL_SUMMON_BODYGUARD: {
+			despawn_familiar(ch, BODYGUARD);
 			break;
 		}
 		case ABIL_BOOST: {
@@ -105,8 +116,8 @@ void check_skill_sell(char_data *ch, int abil) {
 			retract_claws(ch);
 			break;
 		}
-		case ABIL_CLOTH_ARMOR: {
-			remove_armor_by_type(ch, ARMOR_CLOTH);
+		case ABIL_MAGE_ARMOR: {
+			remove_armor_by_type(ch, ARMOR_MAGE);
 			break;
 		}
 		case ABIL_COUNTERSPELL: {
@@ -118,6 +129,10 @@ void check_skill_sell(char_data *ch, int abil) {
 				void un_deathshroud(char_data *ch);
 				un_deathshroud(ch);
 			}
+			break;
+		}
+		case ABIL_DIRE_WOLF: {
+			despawn_familiar(ch, FAMILIAR_DIRE_WOLF);
 			break;
 		}
 		case ABIL_DISGUISE: {
@@ -140,12 +155,10 @@ void check_skill_sell(char_data *ch, int abil) {
 			break;
 		}
 		case ABIL_FAMILIAR: {
-			if ((vict = has_familiar(ch)) && !vict->desc) {
-				if (GET_MOB_VNUM(vict) == FAMILIAR_CAT || GET_MOB_VNUM(vict) == FAMILIAR_SABERTOOTH || GET_MOB_VNUM(vict) == FAMILIAR_SPHINX || GET_MOB_VNUM(vict) == FAMILIAR_GRIFFIN) {
-					act("$n vanishes.", FALSE, vict, NULL, NULL, TO_ROOM);
-					extract_char(vict);
-				}
-			}
+			despawn_familiar(ch, FAMILIAR_CAT);
+			despawn_familiar(ch, FAMILIAR_SABERTOOTH);
+			despawn_familiar(ch, FAMILIAR_SPHINX);
+			despawn_familiar(ch, FAMILIAR_GIANT_TORTOISE);
 			break;
 		}
 		case ABIL_FISH: {
@@ -162,6 +175,10 @@ void check_skill_sell(char_data *ch, int abil) {
 			affect_from_char(ch, ATYPE_FORESIGHT);
 			break;
 		}
+		case ABIL_GRIFFIN: {
+			despawn_familiar(ch, FAMILIAR_GRIFFIN);
+			break;
+		}
 		case ABIL_HEAVY_ARMOR: {
 			remove_armor_by_type(ch, ARMOR_HEAVY);
 			break;
@@ -172,8 +189,8 @@ void check_skill_sell(char_data *ch, int abil) {
 			}
 			break;
 		}
-		case ABIL_LEATHER_ARMOR: {
-			remove_armor_by_type(ch, ARMOR_LEATHER);
+		case ABIL_LIGHT_ARMOR: {
+			remove_armor_by_type(ch, ARMOR_LIGHT);
 			break;
 		}
 		case ABIL_MAJESTY: {
@@ -184,21 +201,26 @@ void check_skill_sell(char_data *ch, int abil) {
 			affect_from_char(ch, ATYPE_MANASHIELD);
 			break;
 		}
+		case ABIL_MANTICORE: {
+			despawn_familiar(ch, FAMILIAR_MANTICORE);
+			break;
+		}
 		case ABIL_MEDIUM_ARMOR: {
 			remove_armor_by_type(ch, ARMOR_MEDIUM);
 			break;
 		}
 		case ABIL_MIRRORIMAGE: {
-			if ((vict = has_familiar(ch)) && !vict->desc && GET_MOB_VNUM(vict) == MIRROR_IMAGE_MOB) {
-				act("$n vanishes.", FALSE, vict, NULL, NULL, TO_ROOM);
-				extract_char(vict);
-			}
+			despawn_familiar(ch, MIRROR_IMAGE_MOB);
 			break;
 		}
 		case ABIL_MIST_FORM: {
 			if (GET_MORPH(ch) == MORPH_MIST) {
 				perform_morph(ch, MORPH_NONE);
 			}
+			break;
+		}
+		case ABIL_MOON_RABBIT: {
+			despawn_familiar(ch, FAMILIAR_MOON_RABBIT);
 			break;
 		}
 		case ABIL_MUMMIFY: {
@@ -220,6 +242,14 @@ void check_skill_sell(char_data *ch, int abil) {
 			}
 			break;
 		}
+		case ABIL_OWL_SHADOW: {
+			despawn_familiar(ch, FAMILIAR_OWL_SHADOW);
+			break;
+		}
+		case ABIL_PHOENIX: {
+			despawn_familiar(ch, FAMILIAR_PHOENIX);
+			break;
+		}
 		case ABIL_PHOENIX_RITE: {
 			affect_from_char(ch, ATYPE_PHOENIX_RITE);
 			break;
@@ -232,7 +262,7 @@ void check_skill_sell(char_data *ch, int abil) {
 			if ((obj = GET_EQ(ch, WEAR_WIELD))) {
 				if (GET_OBJ_VNUM(obj) == o_FIREBALL) {
 					act("You stop using $p.", FALSE, ch, GET_EQ(ch, WEAR_WIELD), NULL, TO_CHAR);
-					unequip_char_to_inventory(ch, WEAR_WIELD, TRUE);
+					unequip_char_to_inventory(ch, WEAR_WIELD);
 				}
 			}
 			break;
@@ -251,6 +281,14 @@ void check_skill_sell(char_data *ch, int abil) {
 			}
 			break;
 		}
+		case ABIL_SALAMANDER: {
+			despawn_familiar(ch, FAMILIAR_SALAMANDER);
+			break;
+		}
+		case ABIL_SCORPION_SHADOW: {
+			despawn_familiar(ch, FAMILIAR_SCORPION_SHADOW);
+			break;
+		}
 		case ABIL_SAGE_WEREWOLF_FORM: {
 			if (GET_MORPH(ch) == MORPH_SAGE_WEREWOLF) {
 				perform_morph(ch, MORPH_NONE);
@@ -266,12 +304,24 @@ void check_skill_sell(char_data *ch, int abil) {
 		case ABIL_SHIELD_BLOCK: {
 			if ((obj = GET_EQ(ch, WEAR_HOLD)) && IS_SHIELD(obj)) {
 				act("You stop using $p.", FALSE, ch, GET_EQ(ch, WEAR_HOLD), NULL, TO_CHAR);
-				unequip_char_to_inventory(ch, WEAR_HOLD, TRUE);
+				unequip_char_to_inventory(ch, WEAR_HOLD);
 			}
 			break;
 		}
 		case ABIL_SIPHON: {
 			affect_from_char(ch, ATYPE_SIPHON);
+			break;
+		}
+		case ABIL_SKELETAL_HULK: {
+			despawn_familiar(ch, FAMILIAR_SKELETAL_HULK);
+			break;
+		}
+		case ABIL_SPIRIT_WOLF: {
+			despawn_familiar(ch, FAMILIAR_SPIRIT_WOLF);
+			break;
+		}
+		case ABIL_SOULMASK: {
+			affect_from_char(ch, ATYPE_SOULMASK);
 			break;
 		}
 		case ABIL_TOWERING_WEREWOLF_FORM: {
@@ -335,6 +385,9 @@ char *ability_color(char_data *ch, int abil) {
 void adjust_abilities_to_empire(char_data *ch, empire_data *emp, bool add) {
 	int mod = (add ? 1 : -1);
 	
+	if (HAS_ABILITY(ch, ABIL_EXARCH_CRAFTS)) {
+		EMPIRE_TECH(emp, TECH_EXARCH_CRAFTS) += mod;
+	}
 	if (HAS_ABILITY(ch, ABIL_WORKFORCE)) {
 		EMPIRE_TECH(emp, TECH_WORKFORCE) += mod;
 	}
@@ -406,6 +459,12 @@ bool can_use_ability(char_data *ch, int ability, int cost_pool, int cost_amount,
 	char buf[MAX_STRING_LENGTH];
 	int time, needs_cost;
 	
+	// purchase check first, or the rest don't make sense.
+	if (!IS_NPC(ch) && ability != NO_ABIL && !HAS_ABILITY(ch, ability)) {
+		msg_to_char(ch, "You have not purchased the %s ability.\r\n", ability_data[ability].name);
+		return FALSE;
+	}
+	
 	// this actually blocks npcs, too, so it's higher than other checks
 	if (cost_pool == BLOOD && cost_amount > 0 && !CAN_SPEND_BLOOD(ch)) {
 		msg_to_char(ch, "Your blood is inert, you can't do that!\r\n");
@@ -420,11 +479,7 @@ bool can_use_ability(char_data *ch, int ability, int cost_pool, int cost_amount,
 	// special rule: require that blood or health costs not reduce player below 1
 	needs_cost = cost_amount + ((cost_pool == HEALTH || cost_pool == BLOOD) ? 1 : 0);
 	
-	// players:
-	if (!HAS_ABILITY(ch, ability)) {
-		msg_to_char(ch, "You have not purchased the %s ability.\r\n", ability_data[ability].name);
-		return FALSE;
-	}
+	// more player checks
 	if (cost_pool >= 0 && cost_pool < NUM_POOLS && cost_amount > 0 && GET_CURRENT_POOL(ch, cost_pool) < needs_cost) {
 		msg_to_char(ch, "You need %d %s point%s to do that.\r\n", cost_amount, pool_types[cost_pool], PLURAL(cost_amount));
 		return FALSE;
@@ -445,17 +500,14 @@ bool can_use_ability(char_data *ch, int ability, int cost_pool, int cost_amount,
 * applies a cooldown, if applicable. This works on both players and NPCs, but
 * only applies the cooldown to players.
 *
-* The player will also experience universal_wait for using the ability.
-*
 * @param char_data *ch The player or NPC.
 * @param int cost_pool HEALTH, MANA, MOVE, BLOOD (NOTHING if no charge).
 * @param int cost_amount Mana (or whatever) amount required, if any.
 * @param int cooldown_type Any COOLDOWN_x const to apply (NOTHING for none).
 * @param int cooldown_time Cooldown duration, if any.
+* @param int wait_type Any WAIT_x const or WAIT_NONE for no command lag.
 */
-void charge_ability_cost(char_data *ch, int cost_pool, int cost_amount, int cooldown_type, int cooldown_time) {
-	extern const int universal_wait;
-	
+void charge_ability_cost(char_data *ch, int cost_pool, int cost_amount, int cooldown_type, int cooldown_time, int wait_type) {
 	if (cost_pool >= 0 && cost_pool < NUM_POOLS && cost_amount > 0) {
 		GET_CURRENT_POOL(ch, cost_pool) = MAX(0, GET_CURRENT_POOL(ch, cost_pool) - cost_amount);
 	}
@@ -464,7 +516,8 @@ void charge_ability_cost(char_data *ch, int cost_pool, int cost_amount, int cool
 	if (cooldown_type > COOLDOWN_RESERVED && cooldown_time > 0 && !IS_NPC(ch)) {
 		add_cooldown(ch, cooldown_type, cooldown_time);
 	}
-	WAIT_STATE(ch, universal_wait);
+	
+	command_lag(ch, wait_type);
 }
 
 
@@ -1401,11 +1454,10 @@ ACMD(do_specialize) {
 bool can_wear_item(char_data *ch, obj_data *item, bool send_messages) {
 	char buf[MAX_STRING_LENGTH];
 	int abil = NO_ABIL;
-	bool level_ok = TRUE;
-	int iter;
-	
+	int iter, level_min;
+
 	// players won't be able to use gear >= these levels if their skill level is < the level
-	int level_ranges[] = { CLASS_SKILL_CAP, SPECIALTY_SKILL_CAP, BASIC_SKILL_CAP, -1 };	// terminate with -1
+	int skill_level_ranges[] = { CLASS_SKILL_CAP, SPECIALTY_SKILL_CAP, BASIC_SKILL_CAP, -1 };	// terminate with -1
 	
 	if (IS_NPC(ch)) {
 		return TRUE;
@@ -1413,12 +1465,12 @@ bool can_wear_item(char_data *ch, obj_data *item, bool send_messages) {
 	
 	if (IS_ARMOR(item)) {
 		switch (GET_ARMOR_TYPE(item)) {
-			case ARMOR_CLOTH: {
-				abil = ABIL_CLOTH_ARMOR;
+			case ARMOR_MAGE: {
+				abil = ABIL_MAGE_ARMOR;
 				break;
 			}
-			case ARMOR_LEATHER: {
-				abil = ABIL_LEATHER_ARMOR;
+			case ARMOR_LIGHT: {
+				abil = ABIL_LIGHT_ARMOR;
 				break;
 			}
 			case ARMOR_MEDIUM: {
@@ -1449,12 +1501,37 @@ bool can_wear_item(char_data *ch, obj_data *item, bool send_messages) {
 		return FALSE;
 	}
 	
-	// check skill levels?
-	if (GET_SKILL_LEVEL(ch) < CLASS_SKILL_CAP && GET_OBJ_CURRENT_SCALE_LEVEL(item) > 0) {
-		for (iter = 0; level_ranges[iter] != -1 && level_ok; ++iter) {
-			if (GET_OBJ_CURRENT_SCALE_LEVEL(item) > level_ranges[iter] && GET_SKILL_LEVEL(ch) < level_ranges[iter]) {
+	// check levels
+	if (!IS_IMMORTAL(ch)) {
+		if (GET_OBJ_CURRENT_SCALE_LEVEL(item) <= CLASS_SKILL_CAP) {
+			for (iter = 0; skill_level_ranges[iter] != -1; ++iter) {
+				if (GET_OBJ_CURRENT_SCALE_LEVEL(item) > skill_level_ranges[iter] && GET_SKILL_LEVEL(ch) < skill_level_ranges[iter]) {
+					if (send_messages) {
+						snprintf(buf, sizeof(buf), "You need to be skill level %d to use $p.", skill_level_ranges[iter]);
+						act(buf, FALSE, ch, item, NULL, TO_CHAR);
+					}
+					return FALSE;
+				}
+			}
+		}
+		else {	// > 100
+			if (OBJ_FLAGGED(item, OBJ_BIND_ON_PICKUP)) {
+				level_min = GET_OBJ_CURRENT_SCALE_LEVEL(item) - 50;
+			}
+			else {
+				level_min = GET_OBJ_CURRENT_SCALE_LEVEL(item) - 25;
+			}
+			level_min = MAX(level_min, CLASS_SKILL_CAP);
+			if (GET_SKILL_LEVEL(ch) < CLASS_SKILL_CAP) {
 				if (send_messages) {
-					snprintf(buf, sizeof(buf), "You need to be skill level %d to use $p.", level_ranges[iter]);
+					snprintf(buf, sizeof(buf), "You need to be skill level %d and total level %d to use $p.", CLASS_SKILL_CAP, level_min);
+					act(buf, FALSE, ch, item, NULL, TO_CHAR);
+				}
+				return FALSE;
+			}
+			if (GET_HIGHEST_KNOWN_LEVEL(ch) < level_min) {
+				if (send_messages) {
+					snprintf(buf, sizeof(buf), "You need to be level %d to use $p.", level_min);
 					act(buf, FALSE, ch, item, NULL, TO_CHAR);
 				}
 				return FALSE;
@@ -1500,6 +1577,9 @@ bool has_cooking_fire(char_data *ch) {
 	if (ROOM_BLD_FLAGGED(IN_ROOM(ch), BLD_COOKING_FIRE)) {	
 		return TRUE;
 	}
+	if (RMT_FLAGGED(IN_ROOM(ch), RMT_COOKING_FIRE)) {	
+		return TRUE;
+	}
 	
 	for (obj = ROOM_CONTENTS(IN_ROOM(ch)); obj; obj = obj->next_content) {
 		if (OBJ_FLAGGED(obj, OBJ_LIGHT) && !CAN_WEAR(obj, ITEM_WEAR_TAKE)) {
@@ -1519,17 +1599,16 @@ bool has_cooking_fire(char_data *ch) {
 */
 obj_data *has_sharp_tool(char_data *ch) {
 	obj_data *obj;
+	int iter;
 	
-	// wield
-	obj = GET_EQ(ch, WEAR_WIELD);
-	if (obj && IS_WEAPON(obj) && attack_hit_info[GET_WEAPON_TYPE(obj)].weapon_type == WEAPON_SHARP) {
-		return obj;
-	}
+	// slots to check (ensure a -1 terminator)
+	int slots[] = { WEAR_WIELD, WEAR_HOLD, WEAR_SHEATH_1, WEAR_SHEATH_2, -1 };
 	
-	// hold
-	obj = GET_EQ(ch, WEAR_HOLD);
-	if (obj && IS_WEAPON(obj) && attack_hit_info[GET_WEAPON_TYPE(obj)].weapon_type == WEAPON_SHARP) {
-		return obj;
+	for (iter = 0; slots[iter] != -1; ++iter) {
+		obj = GET_EQ(ch, slots[iter]);
+		if (obj && IS_WEAPON(obj) && attack_hit_info[GET_WEAPON_TYPE(obj)].weapon_type == WEAPON_SHARP) {
+			return obj;
+		}
 	}
 	
 	return NULL;
@@ -1549,7 +1628,7 @@ void perform_npc_tie(char_data *ch, char_data *victim, int subcmd) {
 		act("$n unties you!", FALSE, ch, 0, victim, TO_VICT | TO_SLEEP);
 		act("$n unties $N.", FALSE, ch, 0, victim, TO_NOTVICT);
 		REMOVE_BIT(MOB_FLAGS(victim), MOB_TIED);
-		obj_to_char((rope = read_object(o_ROPE)), ch);
+		obj_to_char((rope = read_object(o_ROPE, TRUE)), ch);
 		load_otrigger(rope);
 	}
 	else if (!MOB_FLAGGED(victim, MOB_ANIMAL)) {

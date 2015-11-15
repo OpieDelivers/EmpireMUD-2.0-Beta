@@ -40,15 +40,27 @@ Full multiplaying rules are found by typing POLICY.
 
 See also: ALTERNATE
 #
-ADVENTURE "ADVENTURE ZONE" ZONE
+ADVENTURE "ADVENTURE ZONE" ZONE "ADVENTURE SUMMON"
 
 Usage:  adventure
+        adventure summon <player>
 
 EmpireMUD features instanced adventure zones including caves, magical planes,
 and more. Sometimes you can see them on the 'nearby' command. You can get some
 more information about an adventure using the 'adventure' command.
 
-See also: NEARBY
+You can teleport your group to your adventure using 'adventure summon'. This
+will teleport group members from anywhere in the world to the adventure you're
+in. If they leave the adventure for any reason, they will be teleported back
+where they were before (with some exceptions, below).
+
+Adventure summon restrictions:
+- If you die and respawn, you'll be sent back where you were but your corpse
+will not be eligible for resurrection. You can still be summoned back.
+- If you teleport or trinket out, you won't be sent back where you were before
+the adventure summon. (Except random-teleport.)
+
+See also: ACCEPT, GROUP, NEARBY
 #
 ATTRIBUTES STATS STRENGTH DEXTERITY CHARISMA GREATNESS GRT INTELLIGENCE INTELLECT WITS
 
@@ -68,8 +80,9 @@ Mental attributes:
 
 The active attribute in each category cannot go below 1 from equipment; you
 will not be able to use any item that lowers your active attributes below 1.
+There is also currently a maximum rating of 15 in these attributes.
 
-See also: EMPIRE GREATNESS
+See also: DODGE, EMPIRE GREATNESS, SPEED, TO-HIT
 #
 AUTORECALL "AUTO-RECALL" "AUTO RECALL"
 
@@ -133,10 +146,31 @@ equipped it.
 
 Bound items can never be stored or posted for trade, and you can't drop them
 in territory claimed by other empires. Bound items will disappear from the
-ground if left on unclaimed land, like normal. They are safe to leave on
-claimed land or in your private chest.
+ground if left on unclaimed land, like normal. They are safe to leave longer on
+claimed land (although not forever) or in your private chest (no time limit).
 
-See also: HOME
+You cannot unbind items.
+
+See also: TAGS, HOME
+#
+BLOCK "BLOCK CAP"
+
+Your block rating, shown on 'score', is your character's bonus chance to block
+attacks. You must have the Shield Block ability, and be holding a shield in
+your off hand. Block bonuses come from equipment or spell effect, but have no
+benefit if you are not using a shield.
+
+There is a maximum 50% chance to block. The amount of Block required to hit
+this cap is based on the level of your opponent.
+
+You cannot block magical attacks without the Ward Against Magic ability.
+
+Block cap:
+- Start with the mob's level divided by 2 (half)
+- For hard mobs, raise the total by 10%
+- For group mobs, raise the total by 30%
+
+See also: AFFECTS, SCORE, SHIELD BLOCK, WARD AGAINST MAGIC
 #
 BLOOD "BLOOD POINTS" "BLOOD POOL" "BLOOD UPKEEP"
 
@@ -222,12 +256,15 @@ It is added to damage in the same way as Strength.
 
 See also: SCORE
 #
-"CAMPING FIRE" "COOKING FIRE" "CAMP FIRE"
+FIRE "CAMPING FIRE" "COOKING FIRE" "CAMP FIRE"
 
 You can create a cooking fire by lighting a tree or log, using a flint set.
 This will let you cook food, brew potions, or craft pottery.
 
-See also: LIGHT
+You can also cook in a Kitchen, Alchemist, Pottery, or Laboratory. If you have
+the Touch of Flame ability, you don't need a fire at all.
+
+See also: LIGHT, TOUCH OF FLAME
 #
 CHAMELEON
 
@@ -235,19 +272,23 @@ The "chameleon" trait is the property of some buildings to be invisible at a
 distance. Instead of seeing the building and its owner's banner, you see only
 normal terrain.
 #
-CHANNELS SHOUT
+CHANNELS SHOUT /OOC /NEWBIE /RECRUIT /TRADE
 
 Usage:  shout <message>
 
 See also HELP SLASH-CHANNELS for global channels like /ooc and /newbie.
 
 These are channels reserved for specific purposes. Messages on these channels
-reach everyone who is monitoring them. You can turn channels on and off using
-the "toggle" command.
+reach everyone who is monitoring them. You can turn the "shout" and "tell"
+channels on and off using the "toggle" command.
 
 The following channels are available on EmpireMUD:
 
 Global channels:
+&y/ooc&0 - General chat
+&g/newbie&0 - Newbie channel
+&g/recruit&0 - Empire recruitment channel
+&r/trade&0 - Global trade channel
 &yshout&0 - an in-character channel limited to 50 map tiles distance
 &rtell&0 - this is a private channel that is generally considered OOC
 
@@ -340,9 +381,6 @@ Desert Groves re-grow on their own, at random.
 Diminishing returns are numbers that increase quickly at low levels, but more
 slowly at higher levels. For example, the first +20 dodge you get is applied
 directly, but the next +20 dodge only brings you up to +30.
-
-This is applied to several character traits, such as block, dodge, soak, and
-to-hit.
 #
 DISPLAY
 
@@ -359,6 +397,27 @@ Helpful hint: Set an alias to display your favorite set of info.
 
 See also: ALIAS, PROMPT
 #
+DODGE "DODGE CAP"
+
+Your Dodge rating, shown on 'score', is subtracted from your opponent's To-Hit
+score; the result is their chance to hit you as a percent.
+
+For fighting NPCs, the highest possible dodge chance is 75%. Against players,
+it's 95%. Players' chance of hitting you is based on their to-hit score, but
+mobs are more predictable and it is possible to reach a "dodge cap", the amount
+where NPCs hit you as little as possible.
+
+Dodge cap:
+- Start with the mob's level, minus 50 (not less than 0)
+- Add 10% of the mob's level
+- For hard mobs, raise the total by 10%
+- For group mobs, raise the total by 30%
+- For boss mobs, raise the total by both 10% and 30% (+43% total)
+- Add 75 to the total
+- Add +5 per Dexterity the mob has more than you
+
+See also: AFFECTS, SCORE, TO-HIT
+#
 DOT "DOT EFFECT" "DAMAGE OVER TIME" DAMAGE-OVER-TIME
 
 A DoT (Damage over Time) effect is one that continues to deal damage. These
@@ -372,7 +431,7 @@ like (1/5) is the number and maximum number of stacks.
 Physical DoTs can be removed by firstaid. Magical and poison DoTs can be
 removed by cleanse.
 
-See also: AFFECTS, CLEANSE, FIRSTAID, SCORE
+See also: AFFECTS, CLEANSE, DISPEL, FIRSTAID, SCORE
 #
 FARMING CROPS ORCHARDS AGRICULTURE APPLES WHEAT CORN HOPS COTTON BARLEY PEACHES CHERRIES ORANGES RICE OLIVES PEAS GOURDS
 
@@ -408,24 +467,33 @@ See also: BASIC CRAFTS, FORGE
 HEALTH "HIT POINTS" HITPOINTS HP "HEALTH POINTS" "HEALTH POOL"
 
 The health pool is the amount of damage you can take before being knocked out.
-All players begin with 50 health points and remain at this level until they
-gain a class.
+All players begin with 50 health points and starts to rise around level 80.
+Your base health at level 100 is based on your class.
 
 If you're knocked out with 0 health, you will die without assistance.
 
 See also: CLASS, DEATH, ENDURANCE
 #
-HOSTILE THIEF
+HOSTILE ROGUE THIEF
 
-If you commit certain hostile or stealth acts, you may be flagged as "hostile".
+If you commit certain hostile or stealth acts, you may be flagged as 'hostile'.
 While you have the hostile flag, which lasts for one real hour, players can
 attack you as if you had toggled PVP on. City guards will also attack you, if
-they aren't from your empire.
+they aren't from your empire or its allies.
+
+The 'rogue' flag is a stronger, longer-lasting version of 'hostile' that is
+given to players who are not members of an empire when they commit a hostile
+action. The rogue flag is visible to all players.
 
 Examples of hostile actions:
 - taking something off the ground in someone else's territory
 - attacking another empire's citizens
 - infiltrating a building
+
+You can see how long your hostile/rogue flag has left by checking your
+cooldowns.
+
+See also: COOLDOWNS
 #
 INFRA INFRAVISION
 
@@ -451,31 +519,31 @@ is a good way to see what level (or level range) an instance is scaled to.
 
 See also: ADVENTURE
 #
-LEVEL LEVELS "GEAR LEVELS"
+LEVEL LEVELS "GEAR LEVELS" "SKILL LEVEL"
 
 Unlike many games, where your skills and equipment are based on your level,
 EmpireMUD does it backwards. Your level is based on your skills and gear.
 You have three different levels.
 
-Skill level: This level is determined by your top skills. When two of your
-   skills pass level 75, the game gives you a class and these become your
-   class skills. This level does not go above 100, as it is the average of
-   your two class skills. You can see it by typing "skills", or in parentheses
-   on your "score". Skill levels are grouped into three ranges: Basic (up to
-   50), Specialty (up to 75), and Class (up to 100).
+Skill level: This level is determined by your top 3 skills, and is currently
+   capped at 100. You only reach that level when you have two skills at 100
+   and one skill at 75. You can see your skill level by typing "skills", or
+   in parentheses on your "score". Skill levels are grouped into three ranges:
+   Basic (up to 50), Specialty (up to 75), and Class (up to 100).
 
-Gear level: The bonuses you receive from your equipment form your gear level.
-   There is no upper limit on this number, and any gear you have equipped
-   (except sheathed weapons) contributes to your gear level. You can see it
-   by typing "eq".
+Gear level: Your gear level raises your total level to 50 more than the average
+   level of the gear you have equipped (except sheathed weapons, clothes, and
+   items in the ranged slot). You can see it by typing "eq". Some item flags
+   which make the item more powerful, such as superior and drop flags, raise
+   the effective levels of items for this purpose.
 
 Composite level: This is the sum of your skill and gear levels. It is the
    number used for scaling mobs to fight you. This is the level shown on your
    "score".
 
-Note: You can't use gear that's above your current level range. For example,
-   a person in the 51-75 level range can only use items that are scaled up
-   to level 75.
+Note: You can't use gear that's more than 25 levels above you (50 for BoP
+   items). Your highest recent level is used, so you should still be able to
+   remove all your gear and re-equip it.
 
 See also: CLASS, SCALING
 #
@@ -491,8 +559,8 @@ Do not try to get out of a fight by breaking link. You will likely still die.
 MANA "MANA POINTS" "MANA POOL" "MAGIC POINTS"
 
 The mana pool is the amount of magical energy you can channel before you must
-stop to recover some. All players begin with 50 mana points and remain at this
-level until they gain a class.
+stop to recover some. All players begin with 50 mana points and start to rise
+around level 80. Your base mana at level 100 is based on your class.
 
 See also: CLASS, GIFT OF NATURE
 #
@@ -502,8 +570,93 @@ Move points are the basic energy pool for physical effort. It takes move points
 to walk around, and it takes move points to use many physical abilities like
 Kick or Shadowstep.
 
-All players begin with 100 move points. The easiest ways to get more are to
-make a walking stick or a good pair of shoes.
+All players begin with 100 move points and start to rise around level 80. Your
+base move points at level 100 is based on your class. The easiest ways to get
+more move points at any level are to make a walking stick or a good pair of
+shoes.
+#
+MSDP "MUD SERVER DATA PROTOCOL" "MSDP VARIABLES" "MSDP VARS"
+
+MSDP is the Mud Server Data Protocol, a way for mud clients to receive out-of-
+band information (data not displayed in-game) on request. You can learn more
+about it by searching the internet for MSDP + your mud client, or at this
+website: http://tintin.sourceforge.net/msdp/index.php
+
+EmpireMUD supports the following MSDP variables:
+
+ ACCOUNT_NAME - The player's login name
+ CHARACTER_NAME - The character's full name
+ SERVER_ID - The name of the MUD
+ SNIPPET_VERSION - Version of KaVir's protocol snippet used for MSDP
+
+ HEALTH - Current health
+ HEALTH_MAX - Maximum health
+ HEALTH_REGEN - Health regained per 5 seconds
+ MANA - Current mana
+ MANA_MAX - Maximum mana
+ MANA_REGEN - Mana regained per 5 seconds
+ MOVEMENT - Current movement points
+ MOVEMENT_MAX - Maximum movement points
+ MOVEMENT_REGEN - Movement points regained per 5 seconds
+ BLOOD - Current blood points
+ BLOOD_MAX - Maximum blood pool
+ BLOOD_UPKEEP - Blood cost per game hour
+
+ AFFECTS - Table of current affects and durations (seconds)
+ DOTS - Damage Over Time affects in nested table format with:
+    Dot Name => (DURATION, TYPE, DAMAGE, STACKS)
+ COOLDOWNS - Table of cooldowns and their time remaining (seconds)
+ LEVEL - Total level
+ SKILL_LEVEL - Skill level
+ GEAR_LEVEL - Gear level
+ CRAFTING_LEVEL - Crafting level
+ CLASS - Character's class
+ SKILLS - Nested table format with:
+    Skill Name => (LEVEL, EXP, RESETS, NOSKILL)
+ MONEY - Total coins
+ BONUS_EXP - Daily bonus experience remaining
+ INVENTORY - Current inventory size
+ INVENTORY_MAX - Maximum inventory size
+
+ Current attributes: STR, DEX, CHA, GRT, INT, WIT
+ Natural attributes: STR_PERM, DEX_PERM, CHA_PERM, GRT_PERM, INT_PERM, WIT_PERM
+
+ BLOCK - Block rating
+ DODGE - Dodge rating (without dexterity)
+ TO_HIT - To-Hit rating (without dexterity)
+ SPEED - Current weapon attack speed (main hand)
+ RESIST_PHYSICAL - Amount of physical resistance
+ RESIST_MAGICAL - Amount of magical resistance
+ BONUS_PHYSICAL - Bonus physical damage
+ BONUS_MAGICAL - Bonus magical damage
+ BONUS_HEALING - Bonus healing
+ 
+ EMPIRE_NAME - Name of the character's empire
+ EMPIRE_ADJECTIVE - Empire's adjective
+ EMPIRE_RANK - Character's rank in the empire
+ EMPIRE_TERRITORY - Empire's current territory level
+ EMPIRE_TERRITORY_MAX - Empire's maximum territory
+ EMPIRE_TERRITORY_OUTSIDE - Empire's current out-of-city territory
+ EMPIRE_TERRITORY_OUTSIDE_MAX - Empire's maximum out-of-city territory
+ EMPIRE_WEALTH - Empire's total wealth
+ EMPIRE_SCORE - Empire's total score
+
+ OPPONENT_HEALTH - In combat, the opponent's health percent
+ OPPONENT_HEALTH_MAX - Always 100 (when in combat)
+ OPPONENT_LEVEL - In combat, the opponent's level
+ OPPONENT_NAME - In combat, the opponent's name
+
+ AREA_NAME - The name of the adventure, city, or island the player is in
+ ROOM - The room data array, see http://tintin.sourceforge.net/msdp/index.php
+ ROOM_EXITS - A table of vnums for each direction -- only indoors
+ ROOM_NAME - Name of the room the character is in
+ ROOM_VNUM - Virtual number of the room the character is in
+ WORLD_TIME - Current time (24-hour format)
+ WORLD_SEASON - Current season
+
+ The following GUI variables are provided, for a generic GUI:
+  BUTTON_1, BUTTON_2, BUTTON_3, BUTTON_4, BUTTON_5
+  GAUGE_1, GAUGE_2, GAUGE_3, GAUGE_4, GAUGE_5
 #
 MUDSTATS
 
@@ -559,6 +712,42 @@ flag will remain active for 5 minutes after you shut it off.
 
 See also: TOGGLE
 #
+RESIST-MAGICAL "RESIST MAGICAL" "MAGICAL RESISTANCE"
+
+Your magic resistance is a measure of how much damage your character can ignore
+from magical sources. It can reduce incoming magical damage by up to 25%,
+although the amount of resistance required to achieve this depends upon the
+level of the person attacking you.
+
+The amount of resistance required to hit the 25% reduction cap is equal to half
+of the attacker's level. (You need 50 resistance to reach the cap against a
+level 100 mob.) Magical resistance is the second number in the 'Resist' section
+of your score.
+
+Note that fire from magical sources (like the Ready Fireball ability) is
+reduced by this, but fire from physical sources (like a torch weapon) falls
+under physical resistance instead.
+
+See also: RESIST-PHYSICAL, SCORE
+#
+RESIST-PHYSICAL "RESIST PHYSICAL" "PHYSICAL RESISTANCE" SOAK
+
+Your physical resistance is a measure of how much physical damage your
+character can simply shrug off. It can reduce incoming physical damage by up
+to 25%, although the amount of physical resistance required to achieve this
+depends upon the level of the person attacking you.
+
+The amount of resistance required to hit the 25% reduction cap is equal to half
+of the attacker's level. (You need 50 resistance to reach the cap against a
+level 100 mob.) Physical resistance is the first number in the 'Resist' section
+of your score.
+
+Physical resistance includes resistance to fire damage (but not magical fire;
+that's magic resistance). This trait is similar to the "soak" trait from older
+versions of EmpireMUD.
+
+See also: RESIST-MAGICAL, SCORE
+#
 SCALING "MOB SCALING" "SCALING MOBS"
 
 EmpireMUD uses a system of mob-scaling where mobs are procedurally adjusted
@@ -574,15 +763,19 @@ Items are also scaled. In adventures, they are scaled based on the level of
 the mob you got them from. Craftable items are also scaled, based on the skill
 or recipe used to make them, and on the level of the crafter.
 
-See also: CONSIDER, SCALABLE CRAFTS
+See also: CONSIDER, LEVELS, SCALABLE CRAFTS
 #
 SCAN
 
 Usage:  scan <direction>
+        scan <tile name>
 
 This command shows you the same information as the screen-reader map display,
 but in only one direction. The distance you see on a scan is based on your
 mapsize.
+
+You can also scan for nearby tiles matching a given keyword, such as a building
+or crop name. It will scan a distance up to your mapsize.
 
 Example:
  > scan southwest
@@ -597,12 +790,13 @@ blacksmith at a forge.
 
 See also: DIG, EXCAVATE, FORGE
 #
-"SLASH CHANNELS" SLASH-CHANNELS / /JOIN /LEAVE /WHO /HISTORY HISTORY VC "VIRTUAL CHANNELS"
+"SLASH CHANNELS" SLASH-CHANNELS SLASHCHANNELS / /JOIN /CHECK /LEAVE /WHO /HISTORY HISTORY VC "VIRTUAL CHANNELS"
 
 Usage:  /join <channel>
         /leave <channel>
         /history <channel>
         /who <channel>
+        /check <person>
         /<channel> message
         /list
 
@@ -614,6 +808,9 @@ Slash-channels may be considered moderated, public channels if many players
 are on them. However, you can also create them as private channels by not
 telling other players about them.
 
+/who lists all players on a channel. /check lets you see which channels a
+player is on with you. /list lists all channels you are on.
+
 You can start chats with * (asterisk) to make them channel-emotes.
 
 Example:
@@ -622,12 +819,6 @@ Example:
   > /hist kickflip
 
 See also: CHANNELS
-#
-SOAK
-
-Soak is your character's damage absorption trait. Any incoming damage is
-reduced by this amount. Soak rating usually comes from gear or spells. It
-has diminishing returns at 10 points.
 #
 SPEAR
 
@@ -644,12 +835,39 @@ her group. This ensures that these players receive credit for the kill, plus
 any bind-on-pickup loot the mob drops.
 
 If the mob is out of combat long enough to heal, it will also reset its tags.
+
+See also: BINDING
 #
 TIP TIPS "TIP OF THE DAY" HINT
 
 Usage:  tip
 
 This command will give you a helpful tip about the game.
+#
+TO-HIT "TO HIT" TOHIT "HIT CHANCE" "HIT CAP"
+
+Your to-hit rating, shown on 'score', represents the character's ability to
+hit enemies in combat. Your opponent's Dodge rating is subtracted from your
+To-Hit, and the resulting number is your percent chance to hit them. You have
+a base to-hit of 50 with no gear, representing a 50% chance to hit a level 1
+mob.
+
+Players always have a minimum of 5% final chance to hit (mobs have 25%), so
+long as they're within 50 levels of the target. Your opponent's Dodge rating
+is subtracted from your to-hit to determine your final chance to-hit. You can
+compute the "hit cap" -- the point at which you'll hit 100% of the time --
+based on the level of the mob you're fighting.
+
+Hit cap:
+- Start with the mob's level, minus 50 (not less than 0)
+- Add 10% of the mob's level
+- For hard mobs, raise the total by 10%
+- For group mobs, raise the total by 30%
+- For boss mobs, raise the total by both 10% and 30% (+43% total)
+- Add 100 to the total
+- Add +5 per Dexterity the mob has more than you
+
+See also: AFFECTS, DODGE, SCORE
 #
 TRANSPORTATION
 

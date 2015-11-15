@@ -1,5 +1,5 @@
 /* ************************************************************************
-*   File: fight.c                                         EmpireMUD 2.0b1 *
+*   File: fight.c                                         EmpireMUD 2.0b3 *
 *  Usage: Combat system                                                   *
 *                                                                         *
 *  EmpireMUD code base by Paul Clarke, (C) 2000-2015                      *
@@ -9,6 +9,8 @@
 *  CircleMUD (C) 1993, 94 by the Trustees of the Johns Hopkins University *
 *  CircleMUD is based on DikuMUD, Copyright (C) 1990, 1991.               *
 ************************************************************************ */
+
+#include <math.h>
 
 #include "conf.h"
 #include "sysdep.h"
@@ -38,6 +40,7 @@
 
 // external vars
 extern struct message_list fight_messages[MAX_MESSAGES];
+extern const double hit_per_dex;
 
 // external funcs
 ACMD(do_flee);
@@ -47,11 +50,13 @@ extern int determine_best_scale_level(char_data *ch, bool check_group);
 // locals
 int damage(char_data *ch, char_data *victim, int dam, int attacktype, byte damtype);
 void drop_loot(char_data *mob, char_data *killer);
-int get_effective_block(char_data *ch);
-int get_effective_dodge(char_data *ch);
+int get_block_rating(char_data *ch, bool can_gain_skill);
+int get_dodge_modifier(char_data *ch, char_data *attacker, bool can_gain_skill);
+int get_to_hit(char_data *ch, char_data *victim, bool off_hand, bool can_gain_skill);
 double get_weapon_speed(obj_data *weapon);
 void heal(char_data *ch, char_data *vict, int amount);
 int hit(char_data *ch, char_data *victim, obj_data *weapon, bool combat_round);
+extern int lock_instance_level(room_data *room, int level);
 obj_data *make_corpse(char_data *ch);
 void perform_execute(char_data *ch, char_data *victim, int attacktype, int damtype);
 void trigger_distrust_from_hostile(char_data *ch, empire_data *emp);
@@ -59,6 +64,54 @@ void trigger_distrust_from_hostile(char_data *ch, empire_data *emp);
 
  //////////////////////////////////////////////////////////////////////////////
 //// GETTERS / HELPERS ///////////////////////////////////////////////////////
+
+// used by several functions to determine auto-kill
+#define WOULD_EXECUTE(ch, vict)  (IS_NPC(ch) ? (!MOB_FLAGGED((ch), MOB_ANIMAL) || MOB_FLAGGED((ch), MOB_AGGRESSIVE | MOB_HARD | MOB_GROUP)) : (PRF_FLAGGED((ch), PRF_AUTOKILL) || MOB_FLAGGED((vict), MOB_HARD | MOB_GROUP)))
+
+
+/**
+* Determine if ch blocks the attacker.
+*
+* @param char_data *ch The blocker.
+* @param char_data *attacker The attacker.
+* @param bool can_gain_skill Pass TRUE to do skillups or FALSE to just get info.
+* @return bool TRUE if the block succeeds, or FALSE if not.
+*/
+bool check_block(char_data *ch, char_data *attacker, bool can_gain_skill) {
+	obj_data *shield = GET_EQ(ch, WEAR_HOLD);
+	double chance, rating, target;
+	int level;
+	
+	int max_block = 50;	// never pass this value
+	
+	// must have a shield and Shield Block
+	if (!shield || !IS_SHIELD(shield) || (!IS_NPC(ch) && !HAS_ABILITY(ch, ABIL_SHIELD_BLOCK))) {
+		return FALSE;
+	}
+	
+	rating = get_block_rating(ch, can_gain_skill);
+	
+	// penalty for blind/dark
+	if (attacker && !CAN_SEE(ch, attacker)) {
+		rating -= 50;
+	}
+	
+	// block cap and target check
+	level = attacker ? get_approximate_level(attacker) : get_approximate_level(ch);
+	target = level * 0.5;
+	if (attacker && MOB_FLAGGED(attacker, MOB_HARD)) {
+		target *= 1.1;
+	}
+	if (attacker && MOB_FLAGGED(attacker, MOB_GROUP)) {
+		target *= 1.3;
+	}
+	
+	// Block cap is when rating == target
+	chance = MIN(max_block, max_block + rating - target);
+	
+	return (number(1, 100) <= chance);
+}
+
 
 /**
 * Cancels combat for a character if they or their target have certain flags
@@ -85,6 +138,49 @@ bool check_can_still_fight(char_data *ch, char_data *victim) {
 
 
 /**
+* Computes whether one person hits the other, or not, based on their to-hit
+* and dodge ratings.
+*
+* @param char_data *attacker The person attacking.
+* @param char_data *victim The target.
+* @param bool off_hand Whether or not to apply the off-hand penalty to the attacker.
+* @return bool TRUE if the attack hits, or FALSE if not.
+*/
+bool check_hit_vs_dodge(char_data *attacker, char_data *victim, bool off_hand) {
+	int chance;
+	
+	int level_tolerance = 50;	// must be within X levels to get minimum hit chance
+	int min_npc_to_hit = 25;	// min chance an NPC will hit the target
+	int min_pc_to_hit = 5;	// min chance a player will hit the target
+	
+	// safety
+	if (!attacker || !victim) {
+		return FALSE;
+	}
+	
+	if (AWAKE(victim)) {
+		chance = get_to_hit(attacker, victim, off_hand, TRUE) - get_dodge_modifier(victim, attacker, TRUE);
+		
+		// limits IF the character is at least close in level
+		if (get_approximate_level(attacker) >= (get_approximate_level(victim) - level_tolerance)) {
+			if (IS_NPC(attacker)) {
+				chance = MAX(chance, min_npc_to_hit);
+			}
+			else {
+				chance = MAX(chance, min_pc_to_hit);
+			}
+		}
+		
+		return (chance >= number(1, 100));
+	}
+	else {
+		// not awake: always hit
+		return TRUE;
+	}
+}
+
+
+/**
 * Determines what TYPE_x a character is actually using.
 * 
 * @param char_data *ch The character attacking.
@@ -106,8 +202,20 @@ int get_attack_type(char_data *ch, obj_data *weapon) {
 		else if (IS_NPC(ch) && (MOB_ATTACK_TYPE(ch) != 0) && !AFF_FLAGGED(ch, AFF_DISARM)) {
 			w_type = MOB_ATTACK_TYPE(ch);
 		}
+		else if (IS_NPC(ch) && (MOB_ATTACK_TYPE(ch) != 0) && AFF_FLAGGED(ch, AFF_DISARM)) {
+			// disarmed mob
+			if (attack_hit_info[MOB_ATTACK_TYPE(ch)].damage_type == DAM_MAGICAL) {
+				w_type = TYPE_MANA_BLAST;
+			}
+			else {
+				w_type = TYPE_HIT;
+			}
+		}
 		else if (!IS_NPC(ch) && GET_MORPH(ch) != MORPH_NONE) {
 			w_type = get_morph_attack_type(ch);
+		}
+		else if (AFF_FLAGGED(ch, AFF_DISARM) && weapon && IS_WEAPON(weapon) && attack_hit_info[GET_WEAPON_TYPE(weapon)].damage_type == DAM_MAGICAL) {
+			w_type = TYPE_MANA_BLAST;
 		}
 		else {
 			w_type = TYPE_HIT;
@@ -150,41 +258,35 @@ double get_base_dps(obj_data *weapon) {
 
 /**
 * Determine ch's chance to block (0-100).
-* Not to be confused with get_effective_block().
 *
 * @param char_data *ch The blocker.
-* @param char_data *attacker The attacker.
-* @return int The block chance 0-100%.
+* @param bool can_gain_skill Pass TRUE to do skillups or FALSE to just get info.
+* @return int The total block rating.
 */
-int get_block_chance(char_data *ch, char_data *attacker) {
-	obj_data *shield = GET_EQ(ch, WEAR_HOLD);
-	double base = 0.0;
-	double quick_block[] = { 0.0, 10.0, 20.0 };
+int get_block_rating(char_data *ch, bool can_gain_skill) {
+	double rating = 0.0;
 	
-	int max_block = 90;	// never pass this value
+	double quick_block_base = 10.0;
+	double quick_block_scale = 0.1;	// % of level
 	
-	// must have a shield
-	if (!shield || !IS_SHIELD(shield)) {
-		return 0;
-	}
-	
-	// skill required for players to block at all
-	if (!IS_NPC(ch) && !HAS_ABILITY(ch, ABIL_SHIELD_BLOCK)) {
-		return 0;
-	}
+	rating = GET_BLOCK(ch);
 	
 	// quick block procs to add 10%
-	if (skill_check(ch, ABIL_QUICK_BLOCK, DIFF_MEDIUM)) {
-		base += CHOOSE_BY_ABILITY_LEVEL(quick_block, ch, ABIL_QUICK_BLOCK);
+	if (HAS_ABILITY(ch, ABIL_QUICK_BLOCK)) {
+		if (IS_CLASS_ABILITY(ch, ABIL_QUICK_BLOCK)) {
+			rating += MAX(quick_block_base, get_approximate_level(ch) * quick_block_scale);
+		}
+		else {
+			rating += quick_block_base;
+		}
 	}
 	
-	gain_ability_exp(ch, ABIL_SHIELD_BLOCK, 1);
-	gain_ability_exp(ch, ABIL_QUICK_BLOCK, 1);
+	if (can_gain_skill) {
+		gain_ability_exp(ch, ABIL_SHIELD_BLOCK, 2);
+		gain_ability_exp(ch, ABIL_QUICK_BLOCK, 2);
+	}
 		
-	// block modifiers
-	base += get_effective_block(ch);
-	
-	return MIN(max_block, (int) base);
+	return rating;
 }
 
 
@@ -236,7 +338,9 @@ double get_combat_speed(char_data *ch, int pos) {
 	}
 	
 	// wits: it gets .1 second faster for every 4 wits
-	base *= (1.0 - (0.025 * GET_WITS(ch)));
+	if (!HAS_ABILITY(ch, ABIL_FASTCASTING)) {
+		base *= (1.0 - (0.025 * GET_WITS(ch)));
+	}
 	
 	// round to .1 seconds
 	base *= 10.0;
@@ -250,24 +354,38 @@ double get_combat_speed(char_data *ch, int pos) {
 
 /**
 * This is subtracted from get_to_hit (which is 0-100, or more).
-* Not to be confused with get_effective_dodge()
 *
 * @param char_data *ch The dodger.
+* @param char_data *attacker The attacker, if any.
+* @param bool can_gain_skill Only gains skill if TRUE, otherwise this is just informative.
 * @return int The total dodge %.
 */
-int get_dodge_modifier(char_data *ch) {
-	double base;
-	double reflexes[] = { 10.0, 20.0, 30.0 };
+int get_dodge_modifier(char_data *ch, char_data *attacker, bool can_gain_skill) {
+	double base, refl = 0.0;
 	
-	base = 0.0;
+	// no default dodge amount
+	base = GET_DODGE(ch);
 	
-	// 5% per dexterity (balances to-hit dexterity)
-	base += 5.0 * GET_DEXTERITY(ch) + get_effective_dodge(ch);
+	// dexterity (balances to-hit dexterity)
+	base += GET_DEXTERITY(ch) * hit_per_dex;
 	
 	// skills
-	gain_ability_exp(ch, ABIL_REFLEXES, 1);
-	if (!IS_NPC(ch) && skill_check(ch, ABIL_REFLEXES, DIFF_EASY)) {
-		base += CHOOSE_BY_ABILITY_LEVEL(reflexes, ch, ABIL_REFLEXES);
+	if (HAS_ABILITY(ch, ABIL_REFLEXES)) {
+		if (IS_CLASS_ABILITY(ch, ABIL_REFLEXES)) {
+			refl = MAX(10.0, GET_COMPUTED_LEVEL(ch) * 0.1);
+		}
+		else if (IS_SPECIALTY_ABILITY(ch, ABIL_REFLEXES)) {
+			refl = MAX(10.0, GET_COMPUTED_LEVEL(ch) * 0.05);
+		}
+		else {
+			refl = 10.0;
+		}
+		
+		base += refl;
+		
+		if (can_gain_skill) {
+			gain_ability_exp(ch, ABIL_REFLEXES, 2);
+		}
 	}
 	
 	// npc
@@ -275,89 +393,68 @@ int get_dodge_modifier(char_data *ch) {
 		base += MOB_TO_DODGE(ch);
 	}
 	
+	// blind penalty
+	if (attacker && !CAN_SEE(ch, attacker)) {
+		base -= 50;
+	}
+	
 	return (int) base;
 }
 
 
 /**
-* Applies diminishing returns to GET_BLOCK.
-* Not to be confused with get_block_chance().
-*
-* @param char_data *ch The person whose block rating to get.
-* @return int The effective block rating.
-*/
-int get_effective_block(char_data *ch) {
-	return (int) diminishing_returns(GET_BLOCK(ch), 20);
-}
-
-
-/**
-* Applies diminishing returns to GET_DODGE.
-* Not to be confused with get_dodge_modifier.
-*
-* @param char_data *ch The person whose dodge rating to get.
-* @return int The effective dodge rating.
-*/
-int get_effective_dodge(char_data *ch) {
-	return (int) diminishing_returns(GET_DODGE(ch), 50);
-}
-
-
-/**
-* Applies diminishing returns to soak.
-*
-* @param char_data *ch The person whose soak rating to get.
-* @return int The effective soak rating.
-*/
-int get_effective_soak(char_data *ch) {
-	return GET_SOAK(ch); //(int) diminishing_returns(GET_SOAK(ch), 10);
-}
-
-
-/**
-* Applies diminishing returns to GET_TO_HIT.
-* Not to be confused with get_to_hit().
-*
-* @param char_data *ch The person whose to-hit rating to get.
-* @return int The effective to-hit rating.
-*/
-int get_effective_to_hit(char_data *ch) {
-	return (int) diminishing_returns(GET_TO_HIT(ch), 50);
-}
-
-
-/**
-* Chance of ch hitting as 0-100, or more.
-* Not to be confused with get_effective_to_hit().
+* Total to-hit value for a character. Final hit chance will subtract opponent's
+* dodge for a number that is (ideally) 1-100, then the player rolls.
 * 
-* @param chat_data *ch The hitter.
+* @param char_data *ch The hitter.
+* @param char_adta *victim The victim (if any).
 * @param bool off_hand If TRUE, penalizes to-hit due to off-hand item.
+* @param bool can_gain_skill If FALSE, only fetches this as information.
 * @return int The hit %.
 */
-int get_to_hit(char_data *ch, bool off_hand) {
-	double base_chance;
-	double sparring_bonus[] = { 10.0, 20.0, 30.0 };
+int get_to_hit(char_data *ch, char_data *victim, bool off_hand, bool can_gain_skill) {
+	extern const int base_hit_chance;
 	
-	// start at 50%
-	base_chance = 50.0 + get_effective_to_hit(ch);
+	double base_chance, spar = 0.0;
 	
-	// add 5 per dexterity (will be counter-balanced by dodge dexterity)
-	base_chance += 5.0 * GET_DEXTERITY(ch);
+	// starting value
+	base_chance = base_hit_chance + GET_TO_HIT(ch);
 	
-	// skills
-	gain_ability_exp(ch, ABIL_SPARRING, 1);
-	if (skill_check(ch, ABIL_SPARRING, DIFF_EASY)) {
-		base_chance += CHOOSE_BY_ABILITY_LEVEL(sparring_bonus, ch, ABIL_SPARRING);
+	// add dexterity (will be counter-balanced by dodge dexterity)
+	base_chance += GET_DEXTERITY(ch) * hit_per_dex;
+	
+	// skills: sparring
+	if (HAS_ABILITY(ch, ABIL_SPARRING)) {
+		if (IS_CLASS_ABILITY(ch, ABIL_SPARRING)) {
+			spar = MAX(10.0, GET_COMPUTED_LEVEL(ch) * 0.1);
+		}
+		else if (IS_SPECIALTY_ABILITY(ch, ABIL_SPARRING)) {
+			spar = MAX(10.0, GET_COMPUTED_LEVEL(ch) * 0.05);
+		}
+		else {
+			spar = 10.0;
+		}
+		
+		base_chance += spar;
+		
+		if (can_gain_skill) {
+			gain_ability_exp(ch, ABIL_SPARRING, 2);
+		}
 	}
 	
 	// penalty
 	if (off_hand) {
-		base_chance -= 50;	// TODO is this high enough? could be a config
+		base_chance -= 50;
 	}
 	
-	// npc
+	// npc -- add raw hit bonus
 	if (IS_NPC(ch)) {
 		base_chance += MOB_TO_HIT(ch);
+	}
+	
+	// blind/dark penalty
+	if (victim && !CAN_SEE(ch, victim)) {
+		base_chance -= 50;
 	}
 	
 	return (int) base_chance;
@@ -414,11 +511,20 @@ double get_weapon_speed(obj_data *weapon) {
 * @return bool TRUE if it's an ally of ch, or FALSE.
 */
 bool is_fight_ally(char_data *ch, char_data *frenemy) {
-	char_data *fighting = FIGHTING(frenemy);
+	char_data *fighting = FIGHTING(frenemy), *ch_iter, *fr_iter;
 	
-	// self is ally
-	if (ch == frenemy) {
-		return TRUE;
+	// check "master" tree up both sides == people are allies if ch (or any of ch's masters) are the same as frenemy (or any of frenemy's masters)
+	ch_iter = ch;
+	while (ch_iter) {
+		fr_iter = frenemy;
+		while (fr_iter) {
+			if (ch_iter == fr_iter) {
+				// self is ally!
+				return TRUE;
+			}
+			fr_iter = fr_iter->master;
+		}
+		ch_iter = ch_iter->master;
 	}
 	
 	if (fighting) {
@@ -533,7 +639,7 @@ static void recursive_loot_set(obj_data *obj, int idnum, empire_data *emp) {
 
 
 /**
-* Applies skills and soak to damage, if applicable. This can be used for any
+* Applies skills and resistance to damage, if applicable. This can be used for any
 * function but is applied inside of damage() already.
 *
 * @param int dam The original damage.
@@ -545,19 +651,36 @@ int reduce_damage_from_skills(int dam, char_data *victim, char_data *attacker, i
 	extern bool check_blood_fortitude(char_data *ch);
 	
 	bool self = (!attacker || attacker == victim);
+	int max_resist, use_resist;
+	double resist_prc;
 	
 	if (!self) {
-		// damage reduction (usually from armor)
-		if ((damtype != DAM_POISON && damtype != DAM_DIRECT)) {
-			dam -= get_effective_soak(victim);
-		}
-		
 		if (HAS_ABILITY(victim, ABIL_NOBLE_BEARING)) {
 			dam -= GET_GREATNESS(victim);
 		}
+		
+		// damage reduction (usually from armor/spells)
+		if (attacker) {
+			max_resist = get_approximate_level(attacker) / 2;
+			use_resist = 0;
+			
+			if (damtype == DAM_PHYSICAL || damtype == DAM_FIRE || (damtype == DAM_POISON && HAS_ABILITY(victim, ABIL_RESIST_POISON))) {
+				use_resist = GET_RESIST_PHYSICAL(victim);
+			}
+			else if (damtype == DAM_MAGICAL) {
+				use_resist = GET_RESIST_MAGICAL(victim);
+			}
+			
+			// require at least half of the magical resistance requirement to reduce any
+			if (use_resist > max_resist / 2) {
+				use_resist = MIN(use_resist, max_resist);
+				resist_prc = ((double) use_resist - (max_resist/2.0)) / (max_resist / 2.0);	
+				dam = (int) round(dam * (1.0 - (resist_prc / 4.0))); // at 1.0 resist_prc, it reduces damage by 25% (1/4)
+			}
+		}
 	
 		if (check_blood_fortitude(victim)) {
-			dam = (int) (0.9 * dam);
+			dam = (int) round(0.9 * dam);
 		}
 	
 		// redirect some damage to mana: player only
@@ -575,11 +698,8 @@ int reduce_damage_from_skills(int dam, char_data *victim, char_data *attacker, i
 	if (damtype == DAM_POISON) {
 		if (HAS_ABILITY(victim, ABIL_POISON_IMMUNITY)) {
 			dam = 0;
-			gain_ability_exp(victim, ABIL_POISON_IMMUNITY, 2);
 		}
-		else if (skill_check(victim, ABIL_RESIST_POISON, DIFF_HARD)) {
-			dam *= 0.5;
-		}
+		gain_ability_exp(victim, ABIL_POISON_IMMUNITY, 2);
 		gain_ability_exp(victim, ABIL_RESIST_POISON, 5);
 	}
 	
@@ -680,8 +800,9 @@ void death_restore(char_data *ch) {
 		}
 	}
 	
-	// remove respawn
+	// remove respawn/rez
 	remove_cooldown_by_type(ch, COOLDOWN_DEATH_RESPAWN);
+	remove_offers_by_type(ch, OFFER_RESURRECTION);
 	
 	// Pools restore
 	GET_HEALTH(ch) = MAX(1, GET_MAX_HEALTH(ch) / 4);
@@ -733,7 +854,7 @@ obj_data *die(char_data *ch, char_data *killer) {
 	if (EXTRACTED(ch)) {
 		return NULL;
 	}
-		
+	
 	// remove all DoTs (BEFORE phoenix)
 	while (ch->over_time_effects) {
 		dot_remove(ch, ch->over_time_effects);
@@ -755,7 +876,7 @@ obj_data *die(char_data *ch, char_data *killer) {
 
 	// Alert Group if Applicable
 	if (GROUP(ch)) {
-		send_to_group(ch, GROUP(ch), "%s has died.\r\n", GET_NAME(ch));
+		send_to_group(ch, GROUP(ch), "%s has died.", GET_NAME(ch));
 	}
 	
 	// disable things
@@ -784,8 +905,6 @@ obj_data *die(char_data *ch, char_data *killer) {
 	// for players, die() ends here, until they respawn or quit
 	if (!IS_NPC(ch)) {
 		add_cooldown(ch, COOLDOWN_DEATH_RESPAWN, config_get_int("death_release_minutes") * SECS_PER_REAL_MIN);
-		GET_RESURRECT_LOCATION(ch) = NOWHERE;	// ensure no pending resurrect
-		GET_RESURRECT_BY(ch) = NOBODY;
 		msg_to_char(ch, "Type 'respawn' to come back at your tomb.\r\n");
 		GET_POS(ch) = POS_DEAD;	// ensure pos
 		return NULL;
@@ -834,6 +953,55 @@ obj_data *die(char_data *ch, char_data *killer) {
 }
 
 
+// this drops the loot to the inventory of the 'ch' who is interacting -- so run it on the mob itself, usually
+INTERACTION_FUNC(loot_interact) {
+	void scale_item_to_level(obj_data *obj, int level);
+	
+	obj_data *obj;
+	int iter, scale_level = 0;
+	
+	// both ch and inter_mob are required
+	if (!ch || !inter_mob) {
+		return FALSE;
+	}
+	
+	// determine scale level for loot
+	scale_level = get_approximate_level(inter_mob);
+	
+	for (iter = 0; iter < interaction->quantity; ++iter) {
+		obj = read_object(interaction->vnum, TRUE);
+		
+		if (OBJ_FLAGGED(obj, OBJ_SCALABLE)) {
+			// set flags (before scaling)
+			if (!OBJ_FLAGGED(obj, OBJ_GENERIC_DROP)) {
+				if (MOB_FLAGGED(inter_mob, MOB_HARD)) {
+					SET_BIT(GET_OBJ_EXTRA(obj), OBJ_HARD_DROP);
+				}
+				if (MOB_FLAGGED(inter_mob, MOB_GROUP)) {
+					SET_BIT(GET_OBJ_EXTRA(obj), OBJ_GROUP_DROP);
+				}
+			}
+		}
+		
+		// scale
+		scale_item_to_level(obj, scale_level);
+		
+		// preemptive binding
+		if (OBJ_FLAGGED(obj, OBJ_BIND_ON_PICKUP) && IS_NPC(inter_mob)) {
+			bind_obj_to_tag_list(obj, MOB_TAGGED_BY(inter_mob));
+		}
+		
+		// mark for extract if no player gets it
+		SET_BIT(GET_OBJ_EXTRA(obj), OBJ_UNCOLLECTED_LOOT);
+		
+		obj_to_char(obj, inter_mob);
+		load_otrigger(obj);
+	}
+	
+	return TRUE;
+}
+
+
 /**
 * This goes through a mob's loot table and adds item randomly to inventory,
 * which will later be put in the mob's corpse (or whatever).
@@ -843,19 +1011,14 @@ obj_data *die(char_data *ch, char_data *killer) {
 */
 void drop_loot(char_data *mob, char_data *killer) {
 	extern int mob_coins(char_data *mob);
-	void scale_item_to_level(obj_data *obj, int level);
 
-	struct interaction_item *interact;
 	obj_data *obj;
-	int iter, coins, scale_level = 0;
+	int coins;
 	empire_data *coin_emp;
 
 	if (!mob || !IS_NPC(mob) || MOB_FLAGGED(mob, MOB_NO_LOOT)) {
 		return;
 	}
-	
-	// determine scale level for loot
-	scale_level = get_approximate_level(mob);
 	
 	// loot?
 	if (killer && !IS_NPC(killer) && (!GET_LOYALTY(mob) || GET_LOYALTY(mob) == GET_LOYALTY(killer) || char_has_relationship(killer, mob, DIPL_WAR))) {
@@ -872,33 +1035,8 @@ void drop_loot(char_data *mob, char_data *killer) {
 	}
 
 	// find and drop loot
-	for (interact = mob->interactions; interact; interact = interact->next) {
-		if (CHECK_INTERACT(interact, INTERACT_LOOT)) {
-			for (iter = 0; iter < interact->quantity; ++iter) {
-				obj = read_object(interact->vnum);
-				
-				// scale
-				if (OBJ_FLAGGED(obj, OBJ_SCALABLE)) {
-					scale_item_to_level(obj, scale_level);
-				}
-				
-				// preemptive binding
-				if (OBJ_FLAGGED(obj, OBJ_BIND_ON_PICKUP) && IS_NPC(mob)) {
-					bind_obj_to_tag_list(obj, MOB_TAGGED_BY(mob));
-				}
-				
-				// mark for extract if no player gets it
-				SET_BIT(GET_OBJ_EXTRA(obj), OBJ_UNCOLLECTED_LOOT);
-				
-				obj_to_char(obj, mob);
-				load_otrigger(obj);
-				
-				if (interact->exclusive) {
-					break;
-				}
-			}
-		}
-	}
+	run_interactions(mob, mob->interactions, INTERACT_LOOT, IN_ROOM(mob), mob, NULL, loot_interact);
+	run_global_mob_interactions(mob, mob, INTERACT_LOOT, loot_interact);
 }
 
 
@@ -911,10 +1049,8 @@ obj_data *make_corpse(char_data *ch) {
 	obj_data *corpse, *o, *next_o;
 	int i;
 	bool human = (!IS_NPC(ch) || MOB_FLAGGED(ch, MOB_HUMAN));
-	
-	int stolen_object_timer = config_get_int("stolen_object_timer") * SECS_PER_REAL_MIN;
 
-	corpse = read_object(o_CORPSE);
+	corpse = read_object(o_CORPSE, TRUE);
 	
 	// store as person's last corpse id
 	if (!IS_NPC(ch)) {
@@ -971,7 +1107,7 @@ obj_data *make_corpse(char_data *ch) {
 		
 		// rope if it was pulling or tied
 		if (GET_PULLING(ch) || MOB_FLAGGED(ch, MOB_TIED)) {
-			obj_to_obj(read_object(o_ROPE), corpse);
+			obj_to_obj(read_object(o_ROPE, TRUE), corpse);
 		}
 
 		IS_CARRYING_N(ch) = 0;
@@ -983,14 +1119,14 @@ obj_data *make_corpse(char_data *ch) {
 			next_o = o->next;
 			
 			// is it stolen?
-			if (GET_STOLEN_TIMER(o) + stolen_object_timer > time(0)) {
+			if (IS_STOLEN(o)) {
 				obj_to_obj(o, corpse);
 			}
 		}
 		
 		// check eq for stolen
 		for (i = 0; i < NUM_WEARS; ++i) {
-			if (GET_EQ(ch, i) && GET_STOLEN_TIMER(GET_EQ(ch, i)) + stolen_object_timer > time(0)) {
+			if (GET_EQ(ch, i) && IS_STOLEN(GET_EQ(ch, i))) {
 				obj_to_obj(unequip_char(ch, i), corpse);
 			}
 		}
@@ -1020,6 +1156,7 @@ void perform_resurrection(char_data *ch, char_data *rez_by, room_data *loc, int 
 	
 	if (IN_ROOM(ch) != loc) {
 		act("$n vanishes in a swirl of light!", TRUE, ch, NULL, NULL, TO_ROOM);
+		GET_LAST_DIR(ch) = NO_DIR;
 	}
 	
 	// move character
@@ -1043,10 +1180,7 @@ void perform_resurrection(char_data *ch, char_data *rez_by, room_data *loc, int 
 		}
 	}
 	affect_from_char(ch, ATYPE_DEATH_PENALTY);	// in case
-	
-	GET_RESURRECT_LOCATION(ch) = NOWHERE;
-	GET_RESURRECT_BY(ch) = NOBODY;
-	GET_RESURRECT_ABILITY(ch) = NO_ABIL;
+	remove_offers_by_type(ch, OFFER_RESURRECTION);
 
 	// log
 	syslog(SYS_DEATH, GET_INVIS_LEV(ch), TRUE, "%s has been resurrected by %s at %s", GET_NAME(ch), rez_by ? GET_NAME(rez_by) : "(unknown)", room_log_identifier(loc));
@@ -1119,8 +1253,9 @@ void perform_resurrection(char_data *ch, char_data *rez_by, room_data *loc, int 
 * @return obj_data* The player's corpse object, if any.
 */
 obj_data *player_death(char_data *ch) {
-	obj_data *corpse;
+	void cancel_adventure_summon(char_data *ch);
 	
+	obj_data *corpse;
 	perform_dismount(ch);	// just to be sure
 	death_restore(ch);
 	
@@ -1140,8 +1275,13 @@ obj_data *player_death(char_data *ch) {
 	// penalize after so many deaths
 	if (GET_RECENT_DEATH_COUNT(ch) >= config_get_int("deaths_before_penalty") || (is_at_war(GET_LOYALTY(ch)) && GET_RECENT_DEATH_COUNT(ch) >= config_get_int("deaths_before_penalty_war"))) {
 		int duration = config_get_int("seconds_per_death") * (GET_RECENT_DEATH_COUNT(ch) + 1 - config_get_int("deaths_before_penalty")) / SECS_PER_REAL_UPDATE;
-		struct affected_type *af = create_flag_aff(ATYPE_DEATH_PENALTY, duration, AFF_IMMUNE_PHYSICAL | AFF_NO_ATTACK | AFF_STUNNED);
+		struct affected_type *af = create_flag_aff(ATYPE_DEATH_PENALTY, duration, AFF_IMMUNE_PHYSICAL | AFF_NO_ATTACK | AFF_STUNNED, ch);
 		affect_join(ch, af, ADD_DURATION);
+	}
+	
+	if (PLR_FLAGGED(ch, PLR_ADVENTURE_SUMMONED)) {
+		GET_LAST_CORPSE_ID(ch) = -1;	// invalidate their last-corpse-id to prevent a rez (they can be adventure-summoned)
+		// don't actually cancel the summon -- they'll get whisked back when they respawn
 	}
 	
 	return corpse;
@@ -1197,7 +1337,7 @@ static bool tower_would_shoot(room_data *from_room, char_data *vict) {
 	char_data *m;
 	obj_data *pulling = GET_PULLING(vict);
 	int iter, distance;
-	bool hostile = (!IS_NPC(vict) && get_cooldown_time(vict, COOLDOWN_HOSTILE_FLAG) > 0);
+	bool hostile = IS_HOSTILE(vict);
 	
 	// sanity check
 	if (!emp || EXTRACTED(vict) || IS_DEAD(vict)) {
@@ -1241,7 +1381,12 @@ static bool tower_would_shoot(room_data *from_room, char_data *vict) {
 	if (ROOM_AFF_FLAGGED(to_room, ROOM_AFF_DARK)) {
 		return FALSE;
 	}
-
+	
+	// non-aggressive island
+	if (ISLAND_FLAGGED(to_room, ISLE_NO_AGGRO)) {
+		return FALSE;
+	}
+	
 	// Special handling for mobs -- skip any mob not pulling a catapult
 	if (IS_NPC(vict)) {
 		if (!pulling || !CART_CAN_FIRE(pulling)) {
@@ -1323,6 +1468,7 @@ void process_tower(room_data *room) {
 	char_data *ch, *found = NULL;
 	struct tower_victim_list *victim_list = NULL, *tvl;
 	int num_victs = 0, pick;
+	bool junk;
 
 	// empire check
 	if (!(emp = ROOM_OWNER(room))) {
@@ -1335,12 +1481,17 @@ void process_tower(room_data *room) {
 	}
 	
 	// building is in city?
-	if (!IS_IN_CITY_ROOM(room)) {
+	if (!is_in_city_for_empire(room, emp, TRUE, &junk)) {
 		return;
 	}
 	
 	// darkness effect
 	if (ROOM_AFF_FLAGGED(room, ROOM_AFF_DARK)) {
+		return;
+	}
+	
+	// non-aggressive island
+	if (ISLAND_FLAGGED(room, ISLE_NO_AGGRO)) {
 		return;
 	}
 	
@@ -1750,7 +1901,7 @@ bool can_fight(char_data *ch, char_data *victim) {
 	// final stop before play-time
 	
 	// hostile!
-	if (get_cooldown_time(victim, COOLDOWN_HOSTILE_FLAG) > 0) {
+	if (IS_HOSTILE(victim)) {
 		return TRUE;
 	}
 	// allow-pvp
@@ -1800,6 +1951,7 @@ bool can_fight(char_data *ch, char_data *victim) {
 * @param char_data *ch The person who will appear.
 */
 void appear(char_data *ch) {
+	affects_from_char_by_aff_flag(ch, AFF_HIDE | AFF_INVISIBLE);
 	REMOVE_BIT(AFF_FLAGS(ch), AFF_HIDE | AFF_INVISIBLE);
 
 	if (GET_ACCESS_LEVEL(ch) < LVL_GOD) {
@@ -1824,6 +1976,7 @@ void besiege_room(room_data *to_room, int damage) {
 	obj_data *o, *next_o;
 	empire_data *emp = ROOM_OWNER(to_room);
 	int max_dam;
+	bool junk;
 	room_data *rm, *next_rm;
 	
 	// make sure we only hit the home-room
@@ -1831,6 +1984,11 @@ void besiege_room(room_data *to_room, int damage) {
 	
 	// absolutely no damaging city centers
 	if (IS_CITY_CENTER(to_room)) {
+		return;
+	}
+	
+	// start locations are always safezones
+	if (ROOM_SECT_FLAGGED(to_room, SECTF_START_LOCATION)) {
 		return;
 	}
 
@@ -1852,7 +2010,8 @@ void besiege_room(room_data *to_room, int damage) {
 		if (BUILDING_DAMAGE(to_room) >= max_dam) {
 			disassociate_building(to_room);
 			// only abandon outside cities
-			if (emp && !find_city(emp, to_room)) {
+			if (emp && !is_in_city_for_empire(to_room, emp, TRUE, &junk)) {
+				// this does check the city found time so that recently-founded cities don't get abandon protection
 				abandon_room(to_room);
 				read_empire_territory(emp);
 			}
@@ -1932,7 +2091,7 @@ void check_auto_assist(char_data *ch) {
 		}
 		
 		// already busy
-		if (ch == ch_iter || FIGHTING(ch) == ch_iter || GET_POS(ch_iter) < POS_STANDING || FIGHTING(ch_iter) || !CAN_SEE(ch_iter, FIGHTING(ch))) {
+		if (ch == ch_iter || FIGHTING(ch) == ch_iter || GET_POS(ch_iter) < POS_STANDING || FIGHTING(ch_iter) || AFF_FLAGGED(ch_iter, AFF_STUNNED) || IS_INJURED(ch_iter, INJ_TIED | INJ_STAKED) || !CAN_SEE(ch_iter, FIGHTING(ch)) || GET_FEEDING_FROM(ch_iter) || GET_FED_ON_BY(ch_iter)) {
 			continue;
 		}
 		
@@ -1957,9 +2116,9 @@ void check_auto_assist(char_data *ch) {
 		
 		// if we got this far and hit an assist condition
 		if (assist) {
-			act("You jump to $N's aide!", FALSE, ch_iter, 0, ch, TO_CHAR);
-			act("$n jumps to your aide!", FALSE, ch_iter, 0, ch, TO_VICT);
-			act("$n jumps to $N's aide!", FALSE, ch_iter, 0, ch, TO_NOTVICT);
+			act("You jump to $N's aid!", FALSE, ch_iter, 0, ch, TO_CHAR);
+			act("$n jumps to your aid!", FALSE, ch_iter, 0, ch, TO_VICT);
+			act("$n jumps to $N's aid!", FALSE, ch_iter, 0, ch, TO_NOTVICT);
 			engage_combat(ch_iter, FIGHTING(ch), FALSE);
 			continue;
 		}
@@ -1977,7 +2136,7 @@ void check_auto_assist(char_data *ch) {
 bool check_combat_position(char_data *ch, double speed) {
 	// auto-dismount in combat
 	if (IS_RIDING(ch)) {
-		msg_to_char(ch, "You jump down from your mount..\r\n");
+		msg_to_char(ch, "You jump down from your mount.\r\n");
 		perform_dismount(ch);
 		// does not block combat round
 	}
@@ -2018,6 +2177,7 @@ bool check_combat_position(char_data *ch, double speed) {
  *	> 0	How much damage done.
  */
 int damage(char_data *ch, char_data *victim, int dam, int attacktype, byte damtype) {
+	struct instance_data *inst;
 	int iter;
 	bool full_miss = (dam <= 0);
 	
@@ -2030,6 +2190,13 @@ int damage(char_data *ch, char_data *victim, int dam, int attacktype, byte damty
 		log("SYSERR: Attempt to damage corpse '%s' in room #%d by '%s'.", GET_NAME(victim), GET_ROOM_VNUM(IN_ROOM(victim)), GET_NAME(ch));
 		die(victim, ch);
 		return (-1);			/* -je, 7/7/92 */
+	}
+	
+	// look for an instance to lock (before running triggers)
+	if (!IS_NPC(ch) && IS_ADVENTURE_ROOM(IN_ROOM(ch)) && COMPLEX_DATA(IN_ROOM(ch)) && (inst = COMPLEX_DATA(IN_ROOM(ch))->instance)) {
+		if (ADVENTURE_FLAGGED(inst->adventure, ADV_LOCK_LEVEL_ON_COMBAT) && !IS_IMMORTAL(ch)) {
+			lock_instance_level(IN_ROOM(ch), determine_best_scale_level(ch, TRUE));
+		}
 	}
 	
 	check_scaling(victim, ch);
@@ -2066,13 +2233,13 @@ int damage(char_data *ch, char_data *victim, int dam, int attacktype, byte damty
 	dam = reduce_damage_from_skills(dam, victim, ch, damtype);
 	
 	// lethal damage?? check Master Survivalist
-	if ((ch != victim) && dam >= GET_HEALTH(victim) && !IS_NPC(victim) && AWAKE(victim) && CAN_SEE(victim, ch) && HAS_ABILITY(victim, ABIL_MASTER_SURVIVALIST)) {
+	if ((ch != victim) && dam >= GET_HEALTH(victim) && !IS_NPC(victim) && AWAKE(victim) && HAS_ABILITY(victim, ABIL_MASTER_SURVIVALIST)) {
 		if (!number(0, 2)) {
 			msg_to_char(victim, "You dive out of the way at the last second!\r\n");
 			act("$n dives out of the way at the last second!", FALSE, victim, NULL, NULL, TO_ROOM);
 			dam = 0;
 			// wait is based on % of max dexterity, where it's longest when you have 1 dex and shortest at max
-			WAIT_STATE(victim, (3 RL_SEC * (1.0 - ((double) GET_DEXTERITY(victim) / (att_max(victim) + 1)))));
+			GET_WAIT_STATE(victim) = (3 RL_SEC * (1.0 - ((double) GET_DEXTERITY(victim) / (att_max(victim) + 1))));
 		}
 		
 		gain_ability_exp(ch, ABIL_MASTER_SURVIVALIST, 33.4);
@@ -2100,7 +2267,7 @@ int damage(char_data *ch, char_data *victim, int dam, int attacktype, byte damty
 	if (!IS_WEAPON_TYPE(attacktype))
 		skill_message(dam, ch, victim, attacktype);
 	else {
-		if (dam == 0 || ch == victim || (GET_POS(victim) == POS_DEAD && !(!IS_NPC(ch) && !PRF_FLAGGED(ch, PRF_AUTOKILL)))) {
+		if (dam == 0 || ch == victim || (GET_POS(victim) == POS_DEAD && WOULD_EXECUTE(ch, victim))) {
 			if (!skill_message(dam, ch, victim, attacktype))
 				dam_message(dam, ch, victim, attacktype);
 		}
@@ -2143,26 +2310,26 @@ int damage(char_data *ch, char_data *victim, int dam, int attacktype, byte damty
 	// skill gains when you take damage
 	if (!full_miss && !IS_NPC(victim) && ch != victim && !EXTRACTED(victim)) {
 		// endurance (extra HP)
-		gain_ability_exp(victim, ABIL_ENDURANCE, 1);
+		gain_ability_exp(victim, ABIL_ENDURANCE, 2);
 
 		// armor skills
 		for (iter = 0; iter < NUM_WEARS; ++iter) {
 			if (GET_EQ(victim, iter) && GET_ARMOR_TYPE(GET_EQ(victim, iter)) != NOTHING) {
 				switch (GET_ARMOR_TYPE(GET_EQ(victim, iter))) {
-					case ARMOR_CLOTH: {
-						gain_ability_exp(victim, ABIL_CLOTH_ARMOR, 1);
+					case ARMOR_MAGE: {
+						gain_ability_exp(victim, ABIL_MAGE_ARMOR, 2);
 						break;
 					}
-					case ARMOR_LEATHER: {
-						gain_ability_exp(victim, ABIL_LEATHER_ARMOR, 1);
+					case ARMOR_LIGHT: {
+						gain_ability_exp(victim, ABIL_LIGHT_ARMOR, 2);
 						break;
 					}
 					case ARMOR_MEDIUM: {
-						gain_ability_exp(victim, ABIL_MEDIUM_ARMOR, 1);
+						gain_ability_exp(victim, ABIL_MEDIUM_ARMOR, 2);
 						break;
 					}
 					case ARMOR_HEAVY: {
-						gain_ability_exp(victim, ABIL_HEAVY_ARMOR, 1);
+						gain_ability_exp(victim, ABIL_HEAVY_ARMOR, 2);
 						break;
 					}
 				}
@@ -2170,7 +2337,7 @@ int damage(char_data *ch, char_data *victim, int dam, int attacktype, byte damty
 		}
 	
 		if (affected_by_spell(victim, ATYPE_MANASHIELD)) {
-			gain_ability_exp(victim, ABIL_MANASHIELD, 1);
+			gain_ability_exp(victim, ABIL_MANASHIELD, 2);
 		}
 	}
 	
@@ -2326,11 +2493,10 @@ void heal(char_data *ch, char_data *vict, int amount) {
 int hit(char_data *ch, char_data *victim, obj_data *weapon, bool combat_round) {
 	void add_pursuit(char_data *ch, char_data *target);
 	extern int apply_poison(char_data *ch, char_data *vict, int type);
-	extern int lock_instance_level(room_data *room, int level);
 	
 	struct instance_data *inst;
 	int w_type;
-	int dam, hit_chance, result;
+	int dam, result;
 	bool success = FALSE, block = FALSE;
 	bool can_gain_skill;
 	empire_data *victim_emp;
@@ -2347,14 +2513,16 @@ int hit(char_data *ch, char_data *victim, obj_data *weapon, bool combat_round) {
 		return -1;
 	}
 	
-	// weapons not allowed if disarmed
-	if (AFF_FLAGGED(ch, AFF_DISARM)) {
-		weapon = NULL;
-	}
+	// set up some vars
 	w_type = get_attack_type(ch, weapon);
 	victim_emp = GET_LOYALTY(victim);
 	
-	// look for an instance to lock
+	// weapons not allowed if disarmed (do this after get_attack type, which accounts for this)
+	if (AFF_FLAGGED(ch, AFF_DISARM)) {
+		weapon = NULL;
+	}
+	
+	// look for an instance to lock (before running triggers)
 	if (!IS_NPC(ch) && IS_ADVENTURE_ROOM(IN_ROOM(ch)) && COMPLEX_DATA(IN_ROOM(ch)) && (inst = COMPLEX_DATA(IN_ROOM(ch))->instance)) {
 		if (ADVENTURE_FLAGGED(inst->adventure, ADV_LOCK_LEVEL_ON_COMBAT) && !IS_IMMORTAL(ch)) {
 			lock_instance_level(IN_ROOM(ch), determine_best_scale_level(ch, TRUE));
@@ -2364,11 +2532,16 @@ int hit(char_data *ch, char_data *victim, obj_data *weapon, bool combat_round) {
 	/* check if the character has a fight trigger */
 	fight_mtrigger(ch);
 	
+	// some mobs can run fight triggers when they are hitting, but never actually hit
+	if (IS_NPC(ch) && MOB_FLAGGED(ch, MOB_NO_ATTACK)) {
+		return 0;
+	}
+	
 	// hostile activity triggers distrust unless the victim is pvp-flagged or already hostile
 	if (!IS_NPC(ch) && victim_emp && GET_LOYALTY(ch) != victim_emp) {
 		// we check the victim's master if it's an NPC and the master is a PC
 		check = (IS_NPC(victim) && victim->master && !IS_NPC(victim->master)) ? victim->master : victim;
-		if ((IS_NPC(check) || !IS_PVP_FLAGGED(check)) && get_cooldown_time(check, COOLDOWN_HOSTILE_FLAG) <= 0) {
+		if ((IS_NPC(check) || !IS_PVP_FLAGGED(check)) && !IS_HOSTILE(check)) {
 			trigger_distrust_from_hostile(ch, victim_emp);
 		}
 	}
@@ -2402,27 +2575,16 @@ int hit(char_data *ch, char_data *victim, obj_data *weapon, bool combat_round) {
 	can_gain_skill = GET_HEALTH(victim) > 0;
 	
 	// determine hit (if WEAR_HOLD, pass off_hand=TRUE)
-	hit_chance = get_to_hit(ch, (weapon && weapon->worn_on == WEAR_HOLD));
-	
-	// evasion
-	if (AWAKE(victim) && CAN_SEE(victim, ch)) {
-		hit_chance -= get_dodge_modifier(victim);
-	}
-	
-	// absolute minimum of 5% chance of hit so long as ch is at least as high as victim
-	if (get_approximate_level(ch) >= get_approximate_level(victim)) {
-		hit_chance = MAX(5, hit_chance);
-	}
-
-	success = !AWAKE(victim) || (hit_chance >= number(1, 100));
+	success = check_hit_vs_dodge(ch, victim, (weapon && weapon->worn_on == WEAR_HOLD));
 	
 	// blockable?
-	if (success && AWAKE(victim) && CAN_SEE(victim, ch)) {
+	if (success && AWAKE(victim)) {
 		if (attack_hit_info[w_type].damage_type == DAM_PHYSICAL) {
-			block = (get_block_chance(victim, ch) > number(1, 100));
+			block = check_block(victim, ch, TRUE);
 		}
 		else if (HAS_ABILITY(victim, ABIL_WARD_AGAINST_MAGIC) && attack_hit_info[w_type].damage_type == DAM_MAGICAL) {
-			block = ((get_block_chance(victim, ch) * 0.50) > number(1, 100));
+			// half-chance
+			block = check_block(victim, ch, TRUE) && !number(0, 1);
 		}
 	}
 
@@ -2472,19 +2634,19 @@ int hit(char_data *ch, char_data *victim, obj_data *weapon, bool combat_round) {
 		if (can_gain_skill) {
 			if (!IS_NPC(ch) && HAS_ABILITY(ch, ABIL_DAGGER_MASTERY) && weapon && GET_WEAPON_TYPE(weapon) == TYPE_STAB) {
 				dam *= 1.5;
-				gain_ability_exp(ch, ABIL_DAGGER_MASTERY, 1);
+				gain_ability_exp(ch, ABIL_DAGGER_MASTERY, 2);
 			}
 			if (!IS_NPC(ch) && HAS_ABILITY(ch, ABIL_STAFF_MASTERY) && weapon && IS_STAFF(weapon)) {
 				dam *= 1.5;
-				gain_ability_exp(ch, ABIL_STAFF_MASTERY, 1);
+				gain_ability_exp(ch, ABIL_STAFF_MASTERY, 2);
 			}	
 			if (!IS_NPC(ch) && HAS_ABILITY(ch, ABIL_CLAWS) && w_type == TYPE_VAMPIRE_CLAWS) {
-				gain_ability_exp(ch, ABIL_CLAWS, 1);
+				gain_ability_exp(ch, ABIL_CLAWS, 2);
 			}
 
 			// raw damage modified by hunt
 			if (IS_NPC(victim) && MOB_FLAGGED(victim, MOB_ANIMAL) && HAS_ABILITY(ch, ABIL_HUNT)) {
-				gain_ability_exp(ch, ABIL_HUNT, 1);
+				gain_ability_exp(ch, ABIL_HUNT, 2);
 			
 				if (skill_check(ch, ABIL_HUNT, DIFF_EASY)) {
 					dam *= 2;
@@ -2506,23 +2668,25 @@ int hit(char_data *ch, char_data *victim, obj_data *weapon, bool combat_round) {
 		// anything after this must NOT rely on victim being alive
 		result = damage(ch, victim, dam, w_type, attack_hit_info[w_type].damage_type);
 		
-		if (!IS_NPC(ch) && combat_round && can_gain_skill) {
-			gain_ability_exp(ch, ABIL_FINESSE, 1);
-			if (GET_SKILL(ch, SKILL_BATTLE) < EMPIRE_CHORE_SKILL_CAP) {
-				gain_skill_exp(ch, SKILL_BATTLE, 2);
-			}
-			if (affected_by_spell(ch, ATYPE_ALACRITY)) {
-				gain_ability_exp(ch, ABIL_ALACRITY, 1);
-			}
-			if (result >= 0) {
-				if (affected_by_spell(victim, ATYPE_FORESIGHT)) {
-					gain_ability_exp(victim, ABIL_FORESIGHT, 1);
+		if (combat_round && can_gain_skill) {
+			if (!IS_NPC(ch)) {
+				gain_ability_exp(ch, ABIL_FINESSE, 2);
+				if (GET_SKILL(ch, SKILL_BATTLE) < EMPIRE_CHORE_SKILL_CAP) {
+					gain_skill_exp(ch, SKILL_BATTLE, 4);
+				}
+				if (affected_by_spell(ch, ATYPE_ALACRITY)) {
+					gain_ability_exp(ch, ABIL_ALACRITY, 2);
+				}
+			
+				// fireball skill gain
+				if (GET_EQ(ch, WEAR_WIELD) && GET_OBJ_VNUM(GET_EQ(ch, WEAR_WIELD)) == o_FIREBALL) {
+					gain_ability_exp(ch, ABIL_READY_FIREBALL, 2);
 				}
 			}
-			
-			// fireball skill gain
-			if (GET_EQ(ch, WEAR_WIELD) && GET_OBJ_VNUM(GET_EQ(ch, WEAR_WIELD)) == o_FIREBALL) {
-				gain_ability_exp(ch, ABIL_READY_FIREBALL, 1);
+			if (!IS_NPC(victim) && result >= 0) {
+				if (affected_by_spell(victim, ATYPE_FORESIGHT)) {
+					gain_ability_exp(victim, ABIL_FORESIGHT, 2);
+				}
 			}
 		}
 		
@@ -2535,20 +2699,20 @@ int hit(char_data *ch, char_data *victim, obj_data *weapon, bool combat_round) {
 		if (result > 0 && !EXTRACTED(victim) && !IS_DEAD(victim) && IN_ROOM(victim) == IN_ROOM(ch)) {
 			// cut deep: players only
 			if (!IS_NPC(ch) && !AFF_FLAGGED(victim, AFF_IMMUNE_BATTLE) && skill_check(ch, ABIL_CUT_DEEP, DIFF_RARELY) && weapon && attack_hit_info[w_type].weapon_type == WEAPON_SHARP) {
-				apply_dot_effect(victim, ATYPE_CUT_DEEP, CHOOSE_BY_ABILITY_LEVEL(cut_deep_durations, ch, ABIL_CUT_DEEP), DAM_PHYSICAL, 5, 5);
+				apply_dot_effect(victim, ATYPE_CUT_DEEP, CHOOSE_BY_ABILITY_LEVEL(cut_deep_durations, ch, ABIL_CUT_DEEP), DAM_PHYSICAL, 5, 5, ch);
 				
 				act("You cut deep wounds in $N -- $E is bleeding!", FALSE, ch, NULL, victim, TO_CHAR);
 				act("$n's last attack cuts deep -- you are bleeding!", FALSE, ch, NULL, victim, TO_VICT);
 				act("$n's last attack cuts deep -- $N is bleeding!", FALSE, ch, NULL, victim, TO_NOTVICT);
 
 				if (can_gain_skill) {
-					gain_ability_exp(ch, ABIL_CUT_DEEP, 1);
+					gain_ability_exp(ch, ABIL_CUT_DEEP, 10);
 				}
 			}
 		
 			// stunning blow: players only
 			if (!IS_NPC(ch) && !AFF_FLAGGED(victim, AFF_IMMUNE_BATTLE | AFF_IMMUNE_STUN) && skill_check(ch, ABIL_STUNNING_BLOW, DIFF_RARELY) && weapon && attack_hit_info[w_type].weapon_type == WEAPON_BLUNT) {
-				af = create_flag_aff(ATYPE_STUNNING_BLOW, CHOOSE_BY_ABILITY_LEVEL(stunning_blow_durations, ch, ABIL_STUNNING_BLOW), AFF_STUNNED);
+				af = create_flag_aff(ATYPE_STUNNING_BLOW, CHOOSE_BY_ABILITY_LEVEL(stunning_blow_durations, ch, ABIL_STUNNING_BLOW), AFF_STUNNED, ch);
 				affect_join(victim, af, 0);
 				
 				act("That last blow seems to stun $N!", FALSE, ch, NULL, victim, TO_CHAR);
@@ -2556,7 +2720,7 @@ int hit(char_data *ch, char_data *victim, obj_data *weapon, bool combat_round) {
 				act("$n's last blow seems to stun $N!", FALSE, ch, NULL, victim, TO_NOTVICT);
 
 				if (can_gain_skill) {
-					gain_ability_exp(ch, ABIL_STUNNING_BLOW, 1);
+					gain_ability_exp(ch, ABIL_STUNNING_BLOW, 10);
 				}
 			}
 			
@@ -2608,8 +2772,6 @@ void perform_execute(char_data *ch, char_data *victim, int attacktype, int damty
 	char_data *m, *ch_iter;
 	obj_data *weapon;
 
-	#define WOULD_EXECUTE(ch)  (IS_NPC(ch) ? (!MOB_FLAGGED((ch), MOB_ANIMAL) || MOB_FLAGGED((ch), MOB_AGGRESSIVE | MOB_HARD | MOB_GROUP)) : (PRF_FLAGGED((ch), PRF_AUTOKILL)))
-
 	/* stop_fighting() is split around here to help with exp */
 
 	/* Probably sent here by damage() */
@@ -2617,7 +2779,7 @@ void perform_execute(char_data *ch, char_data *victim, int attacktype, int damty
 		ok = TRUE;
 
 	/* Sent here by damage() */
-	if (attacktype > NUM_ATTACK_TYPES || WOULD_EXECUTE(ch)) {
+	if (attacktype > NUM_ATTACK_TYPES || WOULD_EXECUTE(ch, victim)) {
 		ok = TRUE;
 	}
 	
@@ -2636,7 +2798,7 @@ void perform_execute(char_data *ch, char_data *victim, int attacktype, int damty
 
 		// look for anybody in the room fighting victim (including ch) who wouldn't execute:
 		for (ch_iter = ROOM_PEOPLE(IN_ROOM(victim)); ch_iter; ch_iter = ch_iter->next_in_room) {
-			if (ch_iter != victim && FIGHTING(ch_iter) == victim && !WOULD_EXECUTE(ch_iter)) {
+			if (ch_iter != victim && FIGHTING(ch_iter) == victim && !WOULD_EXECUTE(ch_iter, victim)) {
 				stop_fighting(ch_iter);
 			}
 		}
@@ -2670,9 +2832,14 @@ void perform_execute(char_data *ch, char_data *victim, int attacktype, int damty
 		perform_morph(victim, MORPH_NONE);
 		act(buf, TRUE, victim, 0, 0, TO_ROOM);
 	}
-		
-	act("$n is dead, killed by $N! R.I.P.", FALSE, victim, NULL, ch, TO_NOTVICT);
-	act("You have killed $n! R.I.P.", FALSE, victim, NULL, ch, TO_VICT);
+	
+	if (ch == victim) {
+		act("$n is dead -- R.I.P.", FALSE, victim, NULL, ch, TO_NOTVICT);
+	}
+	else {
+		act("$n is dead, killed by $N! R.I.P.", FALSE, victim, NULL, ch, TO_NOTVICT);
+		act("You have killed $n! R.I.P.", FALSE, victim, NULL, ch, TO_VICT);
+	}
 
 	// cleanup
 	end_pursuit(ch, victim);
@@ -2733,6 +2900,9 @@ void set_fighting(char_data *ch, char_data *vict, byte mode) {
 		FIGHT_WAIT(ch) = 0;
 	}
 	GET_POS(ch) = POS_FIGHTING;
+	
+	// remove all stuns when combat starts
+	affects_from_char_by_aff_flag(ch, AFF_STUNNED);
 }
 
 
@@ -2767,8 +2937,9 @@ void trigger_distrust_from_hostile(char_data *ch, empire_data *emp) {
 	
 	add_cooldown(ch, COOLDOWN_HOSTILE_FLAG, config_get_int("hostile_flag_time") * SECS_PER_REAL_MIN);
 	
-	// no player empire? done
+	// no player empire? mark rogue and done
 	if (!chemp) {
+		add_cooldown(ch, COOLDOWN_ROGUE_FLAG, config_get_int("rogue_flag_time") * SECS_PER_REAL_MIN);
 		return;
 	}
 	
@@ -2840,7 +3011,7 @@ void perform_violence_melee(char_data *ch, obj_data *weapon) {
 		return;
 	}
 	
-	if (!IS_NPC(ch) && FIGHTING(ch) && GET_HEALTH(FIGHTING(ch)) <= 0 && !PRF_FLAGGED(ch, PRF_AUTOKILL)) {
+	if (FIGHTING(ch) && GET_HEALTH(FIGHTING(ch)) <= 0 && !WOULD_EXECUTE(ch, FIGHTING(ch))) {
 		stop_fighting(ch);
 	}
 }
@@ -2855,7 +3026,6 @@ void perform_violence_melee(char_data *ch, obj_data *weapon) {
 void perform_violence_missile(char_data *ch, obj_data *weapon) {
 	obj_data *arrow, *best = NULL;
 	int dam = 0;
-	int to_hit;
 	bool success = FALSE, block = FALSE;
 	
 	if (!FIGHTING(ch)) {
@@ -2895,16 +3065,10 @@ void perform_violence_missile(char_data *ch, obj_data *weapon) {
 	}
 
 	// compute
-	to_hit = get_to_hit(ch, FALSE);
-
-	if (AWAKE(FIGHTING(ch)) && CAN_SEE(FIGHTING(ch), ch)) {
-		to_hit -= get_dodge_modifier(FIGHTING(ch));
-	}
+	success = check_hit_vs_dodge(ch, FIGHTING(ch), FALSE);
 	
-	success = (to_hit >= number(1, 100));
-	
-	if (success && AWAKE(FIGHTING(ch)) && CAN_SEE(FIGHTING(ch), ch) && HAS_ABILITY(FIGHTING(ch), ABIL_BLOCK_ARROWS)) {
-		block = (get_block_chance(FIGHTING(ch), ch) > number(1, 100));
+	if (success && AWAKE(FIGHTING(ch)) && HAS_ABILITY(FIGHTING(ch), ABIL_BLOCK_ARROWS)) {
+		block = check_block(FIGHTING(ch), ch, TRUE);
 		gain_ability_exp(FIGHTING(ch), ABIL_BLOCK_ARROWS, 2);
 	}
 	
@@ -2922,10 +3086,10 @@ void perform_violence_missile(char_data *ch, obj_data *weapon) {
 		damage(ch, FIGHTING(ch), dam, ATTACK_ARROW, DAM_PHYSICAL);
 		
 		// McSkillups
-		gain_ability_exp(ch, ABIL_ARCHERY, 1);
-		gain_ability_exp(ch, ABIL_QUICK_DRAW, 1);
+		gain_ability_exp(ch, ABIL_ARCHERY, 2);
+		gain_ability_exp(ch, ABIL_QUICK_DRAW, 2);
 		if (affected_by_spell(ch, ATYPE_ALACRITY)) {
-			gain_ability_exp(ch, ABIL_ALACRITY, 1);
+			gain_ability_exp(ch, ABIL_ALACRITY, 2);
 		}
 	}
 	
@@ -2935,7 +3099,7 @@ void perform_violence_missile(char_data *ch, obj_data *weapon) {
 		extract_obj(best);
 	}
 		
-	if (!IS_NPC(ch) && FIGHTING(ch) && GET_HEALTH(FIGHTING(ch)) <= 0 && !PRF_FLAGGED(ch, PRF_AUTOKILL)) {
+	if (FIGHTING(ch) && GET_HEALTH(FIGHTING(ch)) <= 0 && WOULD_EXECUTE(ch, FIGHTING(ch))) {
 		stop_fighting(ch);
 	}
 }

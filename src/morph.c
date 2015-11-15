@@ -1,5 +1,5 @@
 /* ************************************************************************
-*   File: morph.c                                         EmpireMUD 2.0b1 *
+*   File: morph.c                                         EmpireMUD 2.0b3 *
 *  Usage: morph-related code                                              *
 *                                                                         *
 *  EmpireMUD code base by Paul Clarke, (C) 2000-2015                      *
@@ -141,7 +141,7 @@ const struct morph_data_structure morph_data[] = {
 		{ 0, 50, 0, 0 },
 		{ 0, 100, 0, 0 },
 		{ 2, 0, 0, 0, 0, 0 },
-		{ 125, 200, 50, 100 },
+		{ 100, 200, 25, 100 },
 		TYPE_CLAW, 0,
 		0,
 		"a savage werewolf",
@@ -152,8 +152,8 @@ const struct morph_data_structure morph_data[] = {
 	{ "towering werewolf", ABIL_TOWERING_WEREWOLF_FORM,
 		{ 0, 50, 0, 0 },
 		{ 0, 100, 0, 0 },
-		{ 0, 3, 0, 0, 0, -1 },
-		{ 200, 125, 50, 100 },
+		{ 1, 3, 0, 0, 0, -1 },
+		{ 200, 125, 20, 100 },
 		TYPE_CLAW, 0,
 		0,
 		"a towering werewolf",
@@ -164,7 +164,7 @@ const struct morph_data_structure morph_data[] = {
 	{ "sage werewolf", ABIL_SAGE_WEREWOLF_FORM,
 		{ 0, 50, 0, 0 },
 		{ 0, 100, 0, 0 },
-		{ 0, 0, 0, 0, 2, 0 },
+		{ 1, 0, 0, 0, 2, 0 },
 		{ 50, 100, 150, 100 },
 		TYPE_CLAW, 0,
 		0,
@@ -456,7 +456,14 @@ void perform_morph(char_data *ch, ubyte form) {
 * @param int morph_to any MORPH_x const
 */
 void finish_morphing(char_data *ch, int morph_to) {
+	void undisguise(char_data *ch);
+
 	char lbuf[MAX_STRING_LENGTH];
+	
+	// can't be disguised while morphed
+	if (IS_DISGUISED(ch) && morph_to != MORPH_NONE) {
+		undisguise(ch);
+	}
 	
 	sprintf(lbuf, "%s has become $n!", PERS(ch, ch, FALSE));
 
@@ -566,10 +573,10 @@ ACMD(do_morph) {
 		if (fighting) {
 			// insta-morph!
 			finish_morphing(ch, morph_to);
-			WAIT_STATE(ch, 4 RL_SEC);
+			command_lag(ch, WAIT_OTHER);
 		}
 		else {
-			start_action(ch, ACT_MORPHING, config_get_int("morph_timer"), ACT_ANYWHERE);
+			start_action(ch, ACT_MORPHING, config_get_int("morph_timer"));
 			GET_ACTION_VNUM(ch, 0) = morph_to;
 			msg_to_char(ch, "You begin to transform!\r\n");
 		}

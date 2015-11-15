@@ -1,5 +1,5 @@
 /* ************************************************************************
-*   File: act.stealth.c                                   EmpireMUD 2.0b1 *
+*   File: act.stealth.c                                   EmpireMUD 2.0b3 *
 *  Usage: code related to non-offensive skills and abilities              *
 *                                                                         *
 *  EmpireMUD code base by Paul Clarke, (C) 2000-2015                      *
@@ -9,6 +9,8 @@
 *  CircleMUD (C) 1993, 94 by the Trustees of the Johns Hopkins University *
 *  CircleMUD is based on DikuMUD, Copyright (C) 1990, 1991.               *
 ************************************************************************ */
+
+#include <math.h>
 
 #include "conf.h"
 #include "sysdep.h"
@@ -32,9 +34,10 @@
 
 // external vars
 extern const int rev_dir[];
-extern const int universal_wait;
 
 // external funcs
+extern bool is_fight_ally(char_data *ch, char_data *frenemy);	// fight.c
+void scale_item_to_level(obj_data *obj, int level);
 
 // locals
 int apply_poison(char_data *ch, char_data *vict, int type);
@@ -52,12 +55,12 @@ void trigger_distrust_from_stealth(char_data *ch, empire_data *emp);
 * @param empire_data *emp an opposing empire
 * @return bool TRUE if ch is allowed to infiltrate emp
 */
-bool can_infiltrate(char_data *ch, empire_data *emp) {	
+bool can_infiltrate(char_data *ch, empire_data *emp) {
 	struct empire_political_data *pol;
 	empire_data *chemp = GET_LOYALTY(ch);
 	
-	// if either is not in an empire, it's all good
-	if (!emp || !chemp) {
+	// no empire = no problem
+	if (!emp) {
 		return TRUE;
 	}
 	
@@ -71,10 +74,20 @@ bool can_infiltrate(char_data *ch, empire_data *emp) {
 		return FALSE;
 	}
 	
+	if (!PRF_FLAGGED(ch, PRF_STEALTHABLE)) {
+		msg_to_char(ch, "You cannot infiltrate because your 'stealthable' toggle is off.\r\n");
+		return FALSE;
+	}
+	
+	// further checks only matter if ch is in an empire
+	if (!chemp) {
+		return TRUE;
+	}
+	
 	pol = find_relation(chemp, emp);
 	
 	if (pol && IS_SET(pol->type, DIPL_ALLIED | DIPL_NONAGGR)) {
-		msg_to_char(ch, "You have a non-aggression pact with %s.\r\n", EMPIRE_NAME(emp));
+		msg_to_char(ch, "You can't infiltrate -- you have a non-aggression pact with %s.\r\n", EMPIRE_NAME(emp));
 		return FALSE;
 	}
 	
@@ -101,8 +114,8 @@ bool can_steal(char_data *ch, empire_data *emp) {
 	struct empire_political_data *pol;
 	empire_data *chemp = GET_LOYALTY(ch);
 	
-	// if either is not in an empire, it's all good
-	if (!emp || !chemp) {
+	// no empire = ok
+	if (!emp) {
 		return TRUE;
 	}
 	
@@ -131,6 +144,11 @@ bool can_steal(char_data *ch, empire_data *emp) {
 		return FALSE;
 	}
 	
+	// further checks don't matter if ch is in no empire
+	if (!chemp) {
+		return TRUE;
+	}
+	
 	pol = find_relation(chemp, emp);
 	
 	if (pol && IS_SET(pol->type, DIPL_ALLIED | DIPL_NONAGGR)) {
@@ -144,6 +162,22 @@ bool can_steal(char_data *ch, empire_data *emp) {
 	}
 	
 	// got this far...
+	return TRUE;
+}
+
+
+INTERACTION_FUNC(pickpocket_interact) {
+	int iter;
+	obj_data *obj = NULL;
+	
+	for (iter = 0; iter < interaction->quantity; ++iter) {
+		obj = read_object(interaction->vnum, TRUE);
+		scale_item_to_level(obj, get_approximate_level(inter_mob));
+		obj_to_char(obj, ch);
+		act("You find $p!", FALSE, ch, obj, NULL, TO_CHAR);
+		load_otrigger(obj);
+	}
+		
 	return TRUE;
 }
 
@@ -205,8 +239,9 @@ void trigger_distrust_from_stealth(char_data *ch, empire_data *emp) {
 	
 	add_cooldown(ch, COOLDOWN_HOSTILE_FLAG, config_get_int("hostile_flag_time") * SECS_PER_REAL_MIN);
 	
-	// no player empire? done
+	// no player empire? mark rogue and done
 	if (!chemp) {
+		add_cooldown(ch, COOLDOWN_ROGUE_FLAG, config_get_int("rogue_flag_time") * SECS_PER_REAL_MIN);
 		return;
 	}
 	
@@ -458,7 +493,7 @@ int apply_poison(char_data *ch, char_data *vict, int type) {
 	// atype
 	if (poison_data[type].atype > 0) {
 		
-		af = create_aff(poison_data[type].atype, 2 MUD_HOURS, poison_data[type].apply, poison_data[type].mod * (HAS_ABILITY(ch, ABIL_DEADLY_POISONS) ? 2 : 1), poison_data[type].aff);
+		af = create_aff(poison_data[type].atype, 2 MUD_HOURS, poison_data[type].apply, poison_data[type].mod * (HAS_ABILITY(ch, ABIL_DEADLY_POISONS) ? 2 : 1), poison_data[type].aff, ch);
 		affect_join(vict, af, poison_data[type].allow_stack ? (AVG_DURATION|ADD_MODIFIER) : 0);
 		
 		if (!messaged) {
@@ -472,7 +507,7 @@ int apply_poison(char_data *ch, char_data *vict, int type) {
 	
 	// dot
 	if (poison_data[type].dot_type > 0) {
-		apply_dot_effect(vict, poison_data[type].dot_type, poison_data[type].dot_duration, poison_data[type].dot_damage_type, poison_data[type].dot_damage * (HAS_ABILITY(ch, ABIL_DEADLY_POISONS) ? 2 : 1), poison_data[type].dot_max_stacks);
+		apply_dot_effect(vict, poison_data[type].dot_type, poison_data[type].dot_duration, poison_data[type].dot_damage_type, poison_data[type].dot_damage * (HAS_ABILITY(ch, ABIL_DEADLY_POISONS) ? 2 : 1), poison_data[type].dot_max_stacks, ch);
 		
 		if (!messaged) {
 			act("You feel ill as you are poisoned!", FALSE, vict, NULL, NULL, TO_CHAR);
@@ -572,7 +607,7 @@ ACMD(do_backstab) {
 		return;
 	}
 	else {
-		charge_ability_cost(ch, MOVE, cost, COOLDOWN_BACKSTAB, 9);
+		charge_ability_cost(ch, MOVE, cost, COOLDOWN_BACKSTAB, 9, WAIT_COMBAT_ABILITY);
 
 		success = skill_check(ch, ABIL_BACKSTAB, DIFF_EASY);
 
@@ -590,8 +625,6 @@ ACMD(do_backstab) {
 			}
 
 			if (damage(ch, vict, dam, ATTACK_BACKSTAB, DAM_PHYSICAL) > 0) {
-				WAIT_STATE(vict, 2 RL_SEC);
-				
 				if (HAS_ABILITY(ch, ABIL_POISONS)) {
 					if (!number(0, 1) && apply_poison(ch, vict, USING_POISON(ch)) < 0) {
 						// dedz
@@ -631,14 +664,14 @@ ACMD(do_blind) {
 		return;
 	}
 	else {
-		charge_ability_cost(ch, MOVE, cost, COOLDOWN_BLIND, 10);
+		charge_ability_cost(ch, MOVE, cost, COOLDOWN_BLIND, 10, WAIT_COMBAT_ABILITY);
 
 		if (skill_check(ch, ABIL_BLIND, DIFF_MEDIUM) && !AFF_FLAGGED(vict, AFF_IMMUNE_STEALTH)) {
 			act("You toss a handful of sand into $N's eyes!", FALSE, ch, NULL, vict, TO_CHAR);
 			act("$n tosses a handful of sand into your eyes!\r\n&rYou're blind!&0", FALSE, ch, NULL, vict, TO_VICT);
 			act("$n tosses a handful of sand into $N's eyes!", FALSE, ch, NULL, vict, TO_NOTVICT);
 			
-			af = create_flag_aff(ATYPE_BLIND, 2, AFF_BLIND);
+			af = create_flag_aff(ATYPE_BLIND, 2, AFF_BLIND, ch);
 			affect_join(vict, af, 0);
 		
 			engage_combat(ch, vict, TRUE);
@@ -672,7 +705,7 @@ ACMD(do_darkness) {
 		msg_to_char(ch, "You wave your hand and the darkness dissipates.\r\n");
 		act("$n waves $s hand and the darkness dissipates.", FALSE, ch, 0, 0, TO_ROOM);
 
-		charge_ability_cost(ch, MOVE, cost, NOTHING, 0);
+		charge_ability_cost(ch, MOVE, cost, NOTHING, 0, WAIT_OTHER);
 	}
 	else {
 		msg_to_char(ch, "You draw upon the shadows to blanket the area in an inky darkness!\r\n");
@@ -680,6 +713,7 @@ ACMD(do_darkness) {
 
 		CREATE(af, struct affected_type, 1);
 		af->type = ATYPE_DARKNESS;
+		af->cast_by = CAST_BY_ID(ch);
 		af->duration = 6;
 		af->modifier = 0;
 		af->location = APPLY_NONE;
@@ -689,7 +723,7 @@ ACMD(do_darkness) {
 		free(af);	// affect_to_room duplicates affects
 		gain_ability_exp(ch, ABIL_DARKNESS, 20);
 		
-		charge_ability_cost(ch, MOVE, cost, COOLDOWN_DARKNESS, 15);
+		charge_ability_cost(ch, MOVE, cost, COOLDOWN_DARKNESS, 15, WAIT_ABILITY);
 	}
 }
 
@@ -704,10 +738,13 @@ ACMD(do_disguise) {
 	}
 	else if (IS_DISGUISED(ch)) {
 		undisguise(ch);
-		WAIT_STATE(ch, 2 RL_SEC);
+		command_lag(ch, WAIT_OTHER);
 	}
 	else if (!can_use_ability(ch, ABIL_DISGUISE, NOTHING, 0, NOTHING)) {
 		// sends own message
+	}
+	else if (GET_MORPH(ch) != MORPH_NONE) {
+		msg_to_char(ch, "You can't disguise yourself while morphed.\r\n");
 	}
 	else if (!*arg) {
 		msg_to_char(ch, "Disguise yourself as whom?\r\n");
@@ -733,7 +770,7 @@ ACMD(do_disguise) {
 		act("$n tries to disguise $mself as $N, but fails.", FALSE, ch, NULL, vict, TO_ROOM);
 		
 		gain_ability_exp(ch, ABIL_DISGUISE, 33.4);
-		WAIT_STATE(ch, 4 RL_SEC);
+		command_lag(ch, WAIT_ABILITY);
 	}
 	else {
 		act("You skillfully disguise yourself as $N!", FALSE, ch, NULL, vict, TO_CHAR);
@@ -750,7 +787,68 @@ ACMD(do_disguise) {
 		GET_DISGUISED_SEX(ch) = GET_SEX(vict);
 		
 		gain_ability_exp(ch, ABIL_DISGUISE, 33.4);
-		WAIT_STATE(ch, 4 RL_SEC);
+		GET_WAIT_STATE(ch) = 4 RL_SEC;	// long wait
+	}
+}
+
+
+ACMD(do_diversion) {
+	char_data *victim, *next_vict;
+	struct affected_type *af;
+	int value, cost = 50;
+	bool first = TRUE;
+	
+	if (!can_use_ability(ch, ABIL_DIVERSION, MOVE, cost, COOLDOWN_DIVERSION)) {
+		return;
+	}
+	else if (ABILITY_TRIGGERS(ch, NULL, NULL, ABIL_DIVERSION)) {
+		return;
+	}
+	else {
+		if (SHOULD_APPEAR(ch)) {
+			appear(ch);
+		}
+		
+		charge_ability_cost(ch, MOVE, cost, COOLDOWN_DIVERSION, 30, WAIT_COMBAT_ABILITY);
+		
+		// variable messaging
+		switch (number(0, 2)) {
+			case 0: {
+				msg_to_char(ch, "You release a small flock of pigeons into the melee!\r\n");
+				act("$n releases a small flock of pigeons into the melee!", FALSE, ch, NULL, NULL, TO_ROOM);
+				break;
+			}
+			case 1: {
+				msg_to_char(ch, "You toss some firecrackers into the melee!\r\n");
+				act("$n tosses some firecrackers into the melee!", FALSE, ch, NULL, NULL, TO_ROOM);
+				break;
+			}
+			case 2: {
+				msg_to_char(ch, "You throw a pocketful of sparkling dust into the melee!\r\n");
+				act("$n throws a pocketful of sparkling dust into the melee!", FALSE, ch, NULL, NULL, TO_ROOM);
+				break;
+			}
+		}
+		
+		for (victim = ROOM_PEOPLE(IN_ROOM(ch)); victim; victim = next_vict) {
+			next_vict = victim->next_in_room;
+			
+			if (AFF_FLAGGED(victim, AFF_IMMUNE_STEALTH)) {
+				continue;
+			}
+			
+			// TODO could macro this whole line since it's used in several AoEs
+			if (victim != ch && IS_NPC(victim) && CAN_SEE(ch, victim) && !is_fight_ally(ch, victim) && !in_same_group(ch, victim) && can_fight(ch, victim)) {
+				value = ceil(GET_CHARISMA(ch) * (first ? 1.0 : 0.5));
+				first = FALSE;
+				
+				af = create_mod_aff(ATYPE_DIVERSION, 3, APPLY_WITS, -value, ch);
+				affect_join(victim, af, NOBITS);
+				
+				msg_to_char(victim, "You can't seem to focus on the battle!\r\n");
+				engage_combat(ch, victim, TRUE);
+			}
+		}
 	}
 }
 
@@ -780,9 +878,9 @@ ACMD(do_escape) {
 			act("$n runs toward the window!", TRUE, ch, NULL, NULL, TO_ROOM);
 		}
 		
-		charge_ability_cost(ch, MOVE, cost, NOTHING, 0);
-		start_action(ch, ACT_ESCAPING, 1, 0);
-		WAIT_STATE(ch, 4 RL_SEC);
+		charge_ability_cost(ch, MOVE, cost, NOTHING, 0, WAIT_ABILITY);
+		start_action(ch, ACT_ESCAPING, 1);
+		GET_WAIT_STATE(ch) = 4 RL_SEC;	// long wait
 	}
 }
 
@@ -791,6 +889,11 @@ ACMD(do_hide) {
 	char_data *c;
 	
 	if (!can_use_ability(ch, ABIL_HIDE, NOTHING, 0, NOTHING)) {
+		return;
+	}
+	
+	if (GET_POS(ch) == POS_FIGHTING || is_fighting(ch)) {
+		msg_to_char(ch, "You can't hide in combat!\r\n");
 		return;
 	}
 	
@@ -809,7 +912,7 @@ ACMD(do_hide) {
 		REMOVE_BIT(AFF_FLAGS(ch), AFF_HIDE);
 	}
 
-	WAIT_STATE(ch, 2 RL_SEC);
+	command_lag(ch, WAIT_ABILITY);
 
 	for (c = ROOM_PEOPLE(IN_ROOM(ch)); c; c = c->next_in_room) {
 		if (c != ch && CAN_SEE(c, ch) && (!IS_NPC(c) || !MOB_FLAGGED(c, MOB_ANIMAL)) && !skill_check(ch, ABIL_HIDE, DIFF_HARD) && !skill_check(ch, ABIL_CLING_TO_SHADOW, DIFF_MEDIUM)) {
@@ -827,9 +930,52 @@ ACMD(do_hide) {
 }
 
 
+ACMD(do_howl) {
+	char_data *victim, *next_vict;
+	struct affected_type *af;
+	int value, cost = 50;
+	bool first = TRUE;
+	
+	if (!can_use_ability(ch, ABIL_HOWL, MOVE, cost, COOLDOWN_HOWL)) {
+		return;
+	}
+	else if (ABILITY_TRIGGERS(ch, NULL, NULL, ABIL_HOWL)) {
+		return;
+	}
+	else {
+		if (SHOULD_APPEAR(ch)) {
+			appear(ch);
+		}
+		
+		charge_ability_cost(ch, MOVE, cost, COOLDOWN_HOWL, 30, WAIT_COMBAT_ABILITY);
+		
+		msg_to_char(ch, "You let out a fearsome howl!\r\n");
+		act("$n lets out a bone-chilling howl!", FALSE, ch, NULL, NULL, TO_ROOM);
+		
+		for (victim = ROOM_PEOPLE(IN_ROOM(ch)); victim; victim = next_vict) {
+			next_vict = victim->next_in_room;
+			
+			if (AFF_FLAGGED(victim, AFF_IMMUNE_STEALTH)) {
+				continue;
+			}
+			
+			if (victim != ch && IS_NPC(victim) && CAN_SEE(ch, victim) && !is_fight_ally(ch, victim) && !in_same_group(ch, victim) && can_fight(ch, victim)) {
+				value = GET_CHARISMA(ch) * (first ? 4 : 2);
+				first = FALSE;
+				
+				af = create_mod_aff(ATYPE_HOWL, 3, APPLY_TO_HIT, -value, ch);
+				affect_join(victim, af, NOBITS);
+				
+				msg_to_char(victim, "You are too scared to aim effectively!\r\n");
+				engage_combat(ch, victim, TRUE);
+			}
+		}
+	}
+}
+
+
 ACMD(do_infiltrate) {
 	void empire_skillup(empire_data *emp, int ability, double amount);
-	bool can_infiltrate(char_data *ch, empire_data *emp);
 
 	room_data *to_room;
 	int dir;
@@ -867,7 +1013,7 @@ ACMD(do_infiltrate) {
 		// sends own message
 	}
 	else {
-		charge_ability_cost(ch, MOVE, cost, NOTHING, 0);
+		charge_ability_cost(ch, MOVE, cost, NOTHING, 0, WAIT_ABILITY);
 		
 		gain_ability_exp(ch, ABIL_INFILTRATE, 50);
 		gain_ability_exp(ch, ABIL_IMPROVED_INFILTRATE, 50);
@@ -939,7 +1085,7 @@ ACMD(do_jab) {
 		return;
 	}
 	else {
-		charge_ability_cost(ch, MOVE, cost, COOLDOWN_JAB, 9);
+		charge_ability_cost(ch, MOVE, cost, COOLDOWN_JAB, 9, WAIT_COMBAT_ABILITY);
 
 		if (IS_NPC(ch)) {
 			// NPC has no weapon
@@ -954,7 +1100,28 @@ ACMD(do_jab) {
 		}
 		
 		if (hit(ch, vict, GET_EQ(ch, WEAR_WIELD), FALSE) > 0) {
-			apply_dot_effect(vict, ATYPE_JABBED, 3, DAM_PHYSICAL, get_ability_level(ch, ABIL_JAB) / 24, 2);
+			apply_dot_effect(vict, ATYPE_JABBED, 3, DAM_PHYSICAL, get_ability_level(ch, ABIL_JAB) / 24, 2, ch);
+			
+			if (!HAS_ABILITY(ch, ABIL_STAGGER_JAB) && !AFF_FLAGGED(vict, AFF_IMMUNE_STEALTH)) {
+				struct affected_type *af;
+				int value = ceil(GET_CHARISMA(ch) / 5);
+				af = create_mod_aff(ATYPE_STAGGER_JAB, 3, APPLY_TO_HIT, -value, ch);
+				affect_join(vict, af, ADD_MODIFIER);
+			}
+			
+			if (HAS_ABILITY(ch, ABIL_CRUCIAL_JAB) && !AFF_FLAGGED(vict, AFF_IMMUNE_STEALTH)) {
+				struct affected_type *af;
+				int value = round(GET_COMPUTED_LEVEL(ch) / 80);
+				af = create_mod_aff(ATYPE_CRUCIAL_JAB, 2, APPLY_DEXTERITY, -value, ch);
+				affect_join(vict, af, NOBITS);
+			}
+			
+			if (HAS_ABILITY(ch, ABIL_SHADOW_JAB) && !AFF_FLAGGED(vict, AFF_IMMUNE_STEALTH)) {
+				struct affected_type *af;
+				int value = ceil(GET_CHARISMA(ch) / 5);
+				af = create_mod_aff(ATYPE_SHADOW_JAB, 3, APPLY_DEXTERITY, -value, ch);
+				affect_join(vict, af, ADD_MODIFIER);
+			}
 		}
 		gain_ability_exp(ch, ABIL_JAB, 15);
 	}
@@ -963,33 +1130,12 @@ ACMD(do_jab) {
 
 ACMD(do_pickpocket) {
 	extern bool check_scaling(char_data *mob, char_data *attacker);
-	void scale_item_to_level(obj_data *obj, int level);
-	
 	extern int mob_coins(char_data *mob);
 
-	char_data *vict;
-	obj_data *obj = NULL;
-	int prc, total, iter, coins;
-	obj_vnum vnum = NOTHING;
 	empire_data *ch_emp = NULL, *vict_emp = NULL;
-	
-	struct {
-		obj_vnum vnum;
-		double chance;
-	} pocket_data[] = {
-		{ o_STICK, 1 },		{ o_ROCK, 1 },
-		{ o_FLOWER, 1 },	{ o_BREAD, 3 },
-		{ o_APPLE, 1 },		{ o_NUTS, 1 },
-		{ o_BERRIES, 1 },	{ o_DATES, 1 },
-		{ o_FIG, 1 },		{ o_NOCTURNIUM_INGOT, 0.01 },
-		{ o_IMPERIUM_INGOT, 0.01 },	{ o_GOLD, 0.01 },
-		{ o_TENT, 0.3 },
-		{ o_RING_SILVER, 0.05 },	{ o_MIRROR_SILVER, 0.1 },
-		{ o_CANDLE, 1 },
-	
-		{ NOTHING, 0 }
-	};
-
+	bool any, low_level;
+	char_data *vict;
+	int coins;
 
 	one_argument(argument, arg);
 
@@ -1005,8 +1151,8 @@ ACMD(do_pickpocket) {
 	else if (vict == ch) {
 		send_to_char("Come on now, that's rather stupid!\r\n", ch);
 	}
-	else if (!IS_NPC(vict) || !MOB_FLAGGED(vict, MOB_HUMAN)) {
-		msg_to_char(ch, "You may only pickpocket human npcs.\r\n");
+	else if (!IS_NPC(vict)) {
+		msg_to_char(ch, "You may only pickpocket npcs.\r\n");
 	}
 	else if ((ch_emp = GET_LOYALTY(ch)) && (vict_emp = GET_LOYALTY(vict)) && has_relationship(ch_emp, vict_emp, DIPL_ALLIED | DIPL_NONAGGR)) {
 		msg_to_char(ch, "You can't pickpocket mobs you are allied or have a non-aggression pact with.\r\n");
@@ -1025,18 +1171,9 @@ ACMD(do_pickpocket) {
 	}
 	else {
 		check_scaling(vict, ch);
-	
-		prc = number(1, 10000);
-		total = 0;
-		for (iter = 0; vnum == NOTHING && pocket_data[iter].vnum != NOTHING; ++iter) {
-			total += 100 * pocket_data[iter].chance;
-			if (prc <= total) {
-				vnum = pocket_data[iter].vnum;
-			}
-		}
-		
-		// also some random coins (negative coins are not given)
-		if (!GET_LOYALTY(vict) || GET_LOYALTY(vict) == GET_LOYALTY(ch) || char_has_relationship(ch, vict, DIPL_WAR)) {
+
+		// some random coins (negative coins are not given)
+		if (MOB_FLAGGED(vict, MOB_HUMAN) && (!GET_LOYALTY(vict) || GET_LOYALTY(vict) == GET_LOYALTY(ch) || char_has_relationship(ch, vict, DIPL_WAR))) {
 			coins = mob_coins(vict);
 		}
 		else {
@@ -1044,43 +1181,34 @@ ACMD(do_pickpocket) {
 		}
 		vict_emp = GET_LOYALTY(vict);	// in case not set earlier
 		
-		if (!CAN_SEE(vict, ch) || !AWAKE(vict) || skill_check(ch, ABIL_PICKPOCKET, DIFF_EASY)) {
+		low_level = (get_approximate_level(ch) + 50 < get_approximate_level(vict));
+		
+		if (!low_level && (!CAN_SEE(vict, ch) || !AWAKE(vict) || AFF_FLAGGED(vict, AFF_STUNNED) || skill_check(ch, ABIL_PICKPOCKET, DIFF_EASY))) {
 			// success!
 			SET_BIT(MOB_FLAGS(vict), MOB_PICKPOCKETED);
-		
-			if (vnum != NOTHING) {
-				obj = read_object(vnum);
-				if (OBJ_FLAGGED(obj, OBJ_SCALABLE)) {
-					scale_item_to_level(obj, get_approximate_level(vict));
-				}
-				
-				obj_to_char_or_room(obj, ch);
-			}
+			act("You pick $N's pocket...", FALSE, ch, NULL, vict, TO_CHAR);
+
+			// any will tell us if we got at least 1 item (also sends messages)
+			any = run_interactions(ch, vict->interactions, INTERACT_PICKPOCKET, IN_ROOM(ch), vict, NULL, pickpocket_interact);
+			any |= run_global_mob_interactions(ch, vict, INTERACT_PICKPOCKET, pickpocket_interact);
+			
 			if (coins > 0) {
 				increase_coins(ch, vict_emp, coins);
 			}
 			
 			// messaging
-			if (coins > 0 && obj) {
-				sprintf(buf, "You pick $N's pocket and find $p and %s.\r\n", money_amount(vict_emp, coins));
-				act(buf, FALSE, ch, obj, vict, TO_CHAR);
+			if (coins > 0) {
+				msg_to_char(ch, "You find %s!\r\n", money_amount(vict_emp, coins));
 			}
-			else if (coins > 0) {
-				sprintf(buf, "You pick $N's pocket and find %s.\r\n", money_amount(vict_emp, coins));
-				act(buf, FALSE, ch, NULL, vict, TO_CHAR);
-			}
-			else if (obj) {
-				act("You pick $N's pocket and find $p!", FALSE, ch, obj, vict, TO_CHAR);
-			}
-			else {
-				act("You find nothing useful in $N's pockets.", FALSE, ch, NULL, vict, TO_CHAR);
-			}
-			
-			if (obj) {
-				load_otrigger(obj);
+			else if (!any) {
+				msg_to_char(ch, "You find nothing of any use.\r\n");
 			}
 		}
 		else {
+			if (!AWAKE(vict)) {
+				wake_and_stand(vict);
+			}
+			
 			// fail
 			act("You try to pickpocket $N, but $E catches you!", FALSE, ch, NULL, vict, TO_CHAR);
 			act("$n tries to pick your pocket, but you catch $m in the act!", FALSE, ch, NULL, vict, TO_VICT);
@@ -1095,7 +1223,7 @@ ACMD(do_pickpocket) {
 		
 		// gain either way
 		gain_ability_exp(ch, ABIL_PICKPOCKET, 25);
-		WAIT_STATE(ch, universal_wait);
+		command_lag(ch, WAIT_ABILITY);
 	}
 }
 
@@ -1135,7 +1263,7 @@ ACMD(do_prick) {
 		return;
 	}
 	else {
-		charge_ability_cost(ch, MOVE, cost, COOLDOWN_PRICK, 9);
+		charge_ability_cost(ch, MOVE, cost, COOLDOWN_PRICK, 9, WAIT_COMBAT_ABILITY);
 		
 		if (SHOULD_APPEAR(ch)) {
 			appear(ch);
@@ -1189,11 +1317,14 @@ ACMD(do_sap) {
 	else if (AFF_FLAGGED(vict, AFF_IMMUNE_STUN | AFF_IMMUNE_STEALTH)) {
 		act("$E doesn't look like $E'd be affected by that.", FALSE, ch, NULL, vict, TO_CHAR);
 	}
+	else if (AFF_FLAGGED(vict, AFF_STUNNED)) {
+		act("$E is already stunned!", FALSE, ch, NULL, vict, TO_CHAR);
+	}
 	else if (ABILITY_TRIGGERS(ch, vict, NULL, ABIL_SAP)) {
 		return;
 	}
 	else {
-		charge_ability_cost(ch, MOVE, cost, COOLDOWN_SAP, 9);
+		charge_ability_cost(ch, MOVE, cost, COOLDOWN_SAP, 9, WAIT_COMBAT_ABILITY);
 	
 		success = !AFF_FLAGGED(vict, AFF_IMMUNE_STEALTH) && (!CAN_SEE(vict, ch) || skill_check(ch, ABIL_SAP, DIFF_MEDIUM));
 
@@ -1202,7 +1333,7 @@ ACMD(do_sap) {
 		act("$n saps $N in the back of the head.", TRUE, ch, NULL, vict, TO_NOTVICT);
 		
 		if (success) {
-			af = create_flag_aff(ATYPE_SAP, REAL_UPDATES_PER_MIN, AFF_STUNNED);
+			af = create_flag_aff(ATYPE_SAP, REAL_UPDATES_PER_MIN, AFF_STUNNED, ch);
 			affect_join(vict, af, 0);
 			
 			msg_to_char(vict, "You are momentarily stunned!\r\n");
@@ -1265,8 +1396,52 @@ ACMD(do_search) {
 		if (!found)
 			msg_to_char(ch, "You search, but find nobody.\r\n");
 
-		charge_ability_cost(ch, NOTHING, 0, COOLDOWN_SEARCH, 10);
+		charge_ability_cost(ch, NOTHING, 0, COOLDOWN_SEARCH, 10, WAIT_ABILITY);
 		gain_ability_exp(ch, ABIL_SEARCH, 20);
+	}
+}
+
+
+ACMD(do_shadowcage) {
+	char_data *victim, *next_vict;
+	struct affected_type *af;
+	int value, cost = 50;
+	bool first = TRUE;
+	
+	if (!can_use_ability(ch, ABIL_SHADOWCAGE, MOVE, cost, COOLDOWN_SHADOWCAGE)) {
+		return;
+	}
+	else if (ABILITY_TRIGGERS(ch, NULL, NULL, ABIL_SHADOWCAGE)) {
+		return;
+	}
+	else {
+		if (SHOULD_APPEAR(ch)) {
+			appear(ch);
+		}
+		
+		charge_ability_cost(ch, MOVE, cost, COOLDOWN_SHADOWCAGE, 30, WAIT_COMBAT_ABILITY);
+		
+		msg_to_char(ch, "You shoot webs of pure shadow, forming a tight cage!\r\n");
+		act("$n shoots webs of pure shadow, forming a tight cage!", FALSE, ch, NULL, NULL, TO_ROOM);
+		
+		for (victim = ROOM_PEOPLE(IN_ROOM(ch)); victim; victim = next_vict) {
+			next_vict = victim->next_in_room;
+			
+			if (AFF_FLAGGED(victim, AFF_IMMUNE_STEALTH)) {
+				continue;
+			}
+			
+			if (victim != ch && IS_NPC(victim) && CAN_SEE(ch, victim) && !is_fight_ally(ch, victim) && !in_same_group(ch, victim) && can_fight(ch, victim)) {
+				value = GET_CHARISMA(ch) * (first ? 4 : 2);
+				first = FALSE;
+				
+				af = create_mod_aff(ATYPE_SHADOWCAGE, 3, APPLY_DODGE, -value, ch);
+				affect_join(victim, af, NOBITS);
+				
+				msg_to_char(victim, "You can't seem to dodge as well in the shadowcage!\r\n");
+				engage_combat(ch, victim, TRUE);
+			}
+		}
 	}
 }
 
@@ -1294,8 +1469,8 @@ ACMD(do_shadowstep) {
 	}
 	else if (!*argument)
 		msg_to_char(ch, "Shadowstep to whom?\r\n");
-	else if (!(vict = find_closest_char(ch, argument, FALSE))) {
-		send_config_msg(ch, "no_person");
+	else if (!(vict = find_closest_char(ch, argument, FALSE)) || compute_distance(IN_ROOM(ch), IN_ROOM(vict)) > 7) {
+		msg_to_char(ch, "Nobody by that name within range.\r\n");
 	}
 	else if (ch == vict) {
 		msg_to_char(ch, "You can't shadowstep to yourself.\r\n");
@@ -1303,11 +1478,11 @@ ACMD(do_shadowstep) {
 	else if (IS_GOD(vict) || IS_IMMORTAL(vict)) {
 		msg_to_char(ch, "You can't target a god!\r\n");
 	}
-	else if (compute_distance(IN_ROOM(ch), IN_ROOM(vict)) > 7) {
-		act("$N is too far away.", FALSE, ch, NULL, vict, TO_CHAR);
-	}
 	else if (!IS_OUTDOORS(vict) && !can_use_room(ch, IN_ROOM(vict), GUESTS_ALLOWED) && (emp = ROOM_OWNER(IN_ROOM(vict))) && !can_infiltrate(ch, emp)) {
 		// can_infiltrate sends its own message
+	}
+	else if (IS_NPC(vict) && ((GET_LOYALTY(vict) && GET_LOYALTY(vict) != GET_LOYALTY(ch)) || !can_use_room(ch, IN_ROOM(vict), GUESTS_ALLOWED))) {
+		msg_to_char(ch, "You can't shadowstep to NPCs in other empires.\r\n");
 	}
 	else if (ABILITY_TRIGGERS(ch, vict, NULL, ABIL_SHADOWSTEP)) {
 		return;
@@ -1329,7 +1504,7 @@ ACMD(do_shadowstep) {
 			}
 		}
 
-		charge_ability_cost(ch, MOVE, cost, COOLDOWN_SHADOWSTEP, SECS_PER_REAL_MIN);		
+		charge_ability_cost(ch, MOVE, cost, COOLDOWN_SHADOWSTEP, SECS_PER_REAL_MIN, WAIT_ABILITY);
 		gain_ability_exp(ch, ABIL_SHADOWSTEP, 20);
 		
 		if (infil && !HAS_ABILITY(ch, ABIL_IMPROVED_INFILTRATE) && !skill_check(ch, ABIL_INFILTRATE, DIFF_HARD)) {
@@ -1421,8 +1596,8 @@ ACMD(do_sneak) {
 		REMOVE_BIT(AFF_FLAGS(ch), AFF_HIDE);
 	}
 
-	/* Delay after sneaking */
-	WAIT_STATE(ch, 1 RL_SEC);
+	// Delay after sneaking -- on top of normal move lag
+	GET_WAIT_STATE(ch) += 1 RL_SEC;
 
 	if (perform_move(ch, dir, FALSE, 0)) {	// should be MOVE_NORMAL
 		gain_ability_exp(ch, ABIL_SNEAK, 5);
@@ -1454,11 +1629,14 @@ ACMD(do_steal) {
 	else if (ABILITY_TRIGGERS(ch, NULL, NULL, ABIL_STEAL)) {
 		return;
 	}
-	else if (!can_steal(ch, emp)) {
+	else if (!IS_IMMORTAL(ch) && !can_steal(ch, emp)) {
 		// sends own message
 	}
 	else if (!emp) {
 		msg_to_char(ch, "Nothing is stored here that you can steal.\r\n");
+	}
+	else if (get_room_extra_data(IN_ROOM(ch), ROOM_EXTRA_CEDED)) {
+		msg_to_char(ch, "You can't steal from a building which was ceded to an empire but never used by that empire.\r\n");
 	}
 	else if (!*arg) {
 		if (!(inventory_store_building(ch, IN_ROOM(ch), emp))) {
@@ -1485,7 +1663,10 @@ ACMD(do_steal) {
 				}
 				else {
 					// SUCCESS!
-					if (!skill_check(ch, ABIL_STEAL, DIFF_HARD)) {
+					if (IS_IMMORTAL(ch)) {
+						syslog(SYS_GC, GET_ACCESS_LEVEL(ch), TRUE, "ABUSE: %s stealing %s from %s", GET_NAME(ch), GET_OBJ_SHORT_DESC(proto), EMPIRE_NAME(emp));
+					}
+					else if (!skill_check(ch, ABIL_STEAL, DIFF_HARD)) {
 						log_to_empire(emp, ELOG_HOSTILITY, "Theft at (%d, %d)", X_COORD(IN_ROOM(ch)), Y_COORD(IN_ROOM(ch)));
 					}
 
@@ -1500,7 +1681,7 @@ ACMD(do_steal) {
 					save_empire(emp);
 					read_vault(emp);
 				
-					WAIT_STATE(ch, 4 RL_SEC);
+					GET_WAIT_STATE(ch) = 4 RL_SEC;	// long wait
 				}
 			}
 		}
@@ -1514,11 +1695,9 @@ ACMD(do_steal) {
 
 
 ACMD(do_terrify) {
-	ACMD(do_flee);
-
 	struct affected_type *af;
+	int value, cost = 15;
 	char_data *victim;
-	int cost = 15;
 
 	one_argument(argument, arg);
 
@@ -1534,17 +1713,17 @@ ACMD(do_terrify) {
 	}
 	else if (!can_fight(ch, victim))
 		act("You can't terrify $N!", FALSE, ch, 0, victim, TO_CHAR);
-	else if (!AWAKE(victim) || IS_DEAD(victim) || AFF_FLAGGED(victim, AFF_BLIND)) {
+	else if (!AWAKE(victim) || IS_DEAD(victim)) {
 		msg_to_char(ch, "You can't use your shadows to terrify someone who can't even see them!\r\n");
 	}
-	else if (AFF_FLAGGED(victim, AFF_IMMUNE_STUN | AFF_IMMUNE_STEALTH)) {
+	else if (AFF_FLAGGED(victim, AFF_IMMUNE_STEALTH)) {
 		act("$E doesn't look like $E'd be affected by that.", FALSE, ch, NULL, victim, TO_CHAR);
 	}
 	else if (ABILITY_TRIGGERS(ch, victim, NULL, ABIL_TERRIFY)) {
 		return;
 	}
 	else {
-		charge_ability_cost(ch, MOVE, cost, COOLDOWN_TERRIFY, 15);
+		charge_ability_cost(ch, MOVE, cost, COOLDOWN_TERRIFY, 15, WAIT_COMBAT_ABILITY);
 		
 		if (SHOULD_APPEAR(ch)) {
 			appear(ch);
@@ -1555,19 +1734,17 @@ ACMD(do_terrify) {
 		act("Shadows creep up around $n and then strike out at $N!", FALSE, ch, 0, victim, TO_NOTVICT);
 		
 		if (skill_check(ch, ABIL_TERRIFY, DIFF_HARD) && !AFF_FLAGGED(victim, AFF_IMMUNE_STEALTH)) {
-			af = create_flag_aff(ATYPE_TERRIFY, 0.5 * REAL_UPDATES_PER_MIN, AFF_STUNNED);
+			value = round(GET_COMPUTED_LEVEL(ch) / 30);
+			af = create_mod_aff(ATYPE_TERRIFY, 0.5 * REAL_UPDATES_PER_MIN, APPLY_BONUS_PHYSICAL, -value, ch);
+			affect_join(victim, af, 0);
+			af = create_mod_aff(ATYPE_TERRIFY, 0.5 * REAL_UPDATES_PER_MIN, APPLY_BONUS_MAGICAL, -value, ch);
 			affect_join(victim, af, 0);
 			
 			msg_to_char(victim, "You are terrified!\r\n");
 			act("$n is terrified!", TRUE, victim, NULL, NULL, TO_ROOM);
 		}
-		else {
-			engage_combat(victim, ch, TRUE);
-		}
 		
+		engage_combat(victim, ch, TRUE);
 		gain_ability_exp(ch, ABIL_TERRIFY, 15);
-		
-		// release other terrifiers here
-		limit_crowd_control(victim, ATYPE_TERRIFY);
 	}
 }

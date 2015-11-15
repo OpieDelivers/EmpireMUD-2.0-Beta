@@ -1,5 +1,5 @@
 /* ************************************************************************
-*   File: handler.c                                       EmpireMUD 2.0b1 *
+*   File: handler.c                                       EmpireMUD 2.0b3 *
 *  Usage: internal funcs: moving and finding chars/objs                   *
 *                                                                         *
 *  EmpireMUD code base by Paul Clarke, (C) 2000-2015                      *
@@ -24,6 +24,7 @@
 #include "interpreter.h"
 #include "skills.h"
 #include "dg_scripts.h"
+#include "vnums.h"
 
 /**
 * Contents:
@@ -46,6 +47,7 @@
 *   Object Location Handlers
 *   Object Message Handlers
 *   Object Targeting Handlers
+*   Offer Handlers
 *   Resource Depletion Handlers
 *   Room Handlers
 *   Room Extra Handlers
@@ -58,23 +60,19 @@
 *   Miscellaneous Handlers
 */
 
-
-#define MATCH_ITEM_NAME(str, obj)  (isname((str), GET_OBJ_KEYWORDS(obj)) || (IS_BOOK(obj) && isname((str), get_book_item_name_by_id(GET_BOOK_ID(obj)))) || (IS_DRINK_CONTAINER(obj) && GET_DRINK_CONTAINER_CONTENTS(obj) > 0 && isname((str), drinks[GET_DRINK_CONTAINER_TYPE(obj)])))
-#define MATCH_CHAR_DISGUISED_NAME(str, ch)  (isname((str), PERS((ch),(ch),FALSE)))
-#define MATCH_CHAR_NAME(str, ch)  ((!IS_NPC(ch) && GET_LASTNAME(ch) && isname((str), GET_LASTNAME(ch))) || isname((str), GET_PC_NAME(ch)) || MATCH_CHAR_DISGUISED_NAME(str, ch))
-#define MATCH_CHAR_NAME_ROOM(viewer, str, target)  ((IS_DISGUISED(target) && !IS_IMMORTAL(viewer) && !SAME_EMPIRE(viewer, target)) ? MATCH_CHAR_DISGUISED_NAME(str, target) : MATCH_CHAR_NAME(str, target))
-
-
 // externs
 extern const int confused_dirs[NUM_SIMPLE_DIRS][2][NUM_OF_DIRS];
 extern const char *drinks[];
-extern char *get_book_item_name_by_id(int id);
 extern int get_north_for_char(char_data *ch);
 extern struct complex_room_data *init_complex_data();
 void write_lore(char_data *ch);
 const struct wear_data_type wear_data[NUM_WEARS];
 
+// external funcs
+void scale_item_to_level(obj_data *obj, int level);
+
 // locals
+static void add_obj_binding(int idnum, struct obj_binding **list);
 void remove_lore_record(char_data *ch, struct lore_data *lore);
 
 // local file scope variables
@@ -359,9 +357,14 @@ void affect_modify(char_data *ch, byte loc, sh_int mod, bitvector_t bitv, bool a
 			SAFE_ADD(GET_EXTRA_BLOOD(ch), mod, INT_MIN, INT_MAX, TRUE);
 			break;
 		}
-		case APPLY_SOAK:
-			SAFE_ADD(GET_SOAK(ch), mod, INT_MIN, INT_MAX, TRUE);
+		case APPLY_RESIST_PHYSICAL: {
+			SAFE_ADD(GET_RESIST_PHYSICAL(ch), mod, INT_MIN, INT_MAX, TRUE);
 			break;
+		}
+		case APPLY_RESIST_MAGICAL: {
+			SAFE_ADD(GET_RESIST_MAGICAL(ch), mod, INT_MIN, INT_MAX, TRUE);
+			break;
+		}
 		case APPLY_TO_HIT: {
 			SAFE_ADD(GET_TO_HIT(ch), mod, INT_MIN, INT_MAX, TRUE);
 			break;
@@ -399,6 +402,10 @@ void affect_modify(char_data *ch, byte loc, sh_int mod, bitvector_t bitv, bool a
 		}
 		case APPLY_HEAL_OVER_TIME: {
 			SAFE_ADD(GET_HEAL_OVER_TIME(ch), mod, INT_MIN, INT_MAX, TRUE);
+			break;
+		}
+		case APPLY_CRAFTING: {
+			SAFE_ADD(GET_CRAFTING_BONUS(ch), mod, INT_MIN, INT_MAX, TRUE);
 			break;
 		}
 		default:
@@ -554,15 +561,14 @@ void affect_total(char_data *ch) {
 	
 	// Base energies do not change
 	if (!IS_NPC(ch)) {
+		GET_MAX_HEALTH(ch) = base_player_pools[HEALTH];
+		GET_MAX_MOVE(ch) = base_player_pools[MOVE];
+		GET_MAX_MANA(ch) = base_player_pools[MANA];
+		
 		if (GET_CLASS(ch) != CLASS_NONE) {
-			GET_MAX_HEALTH(ch) = MAX(base_player_pools[HEALTH], GET_CLASS_PROGRESSION(ch) * class_data[GET_CLASS(ch)].max_pools[HEALTH] / 100);
-			GET_MAX_MOVE(ch) = MAX(base_player_pools[MOVE], GET_CLASS_PROGRESSION(ch) * class_data[GET_CLASS(ch)].max_pools[MOVE] / 100);
-			GET_MAX_MANA(ch) = MAX(base_player_pools[MANA], GET_CLASS_PROGRESSION(ch) * class_data[GET_CLASS(ch)].max_pools[MANA] / 100);
-		}
-		else {
-			GET_MAX_HEALTH(ch) = base_player_pools[HEALTH];
-			GET_MAX_MOVE(ch) = base_player_pools[MOVE];
-			GET_MAX_MANA(ch) = base_player_pools[MANA];
+			GET_MAX_HEALTH(ch) += MAX(0, GET_CLASS_PROGRESSION(ch) * (class_data[GET_CLASS(ch)].max_pools[HEALTH] - base_player_pools[HEALTH]) / 100);
+			GET_MAX_MOVE(ch) += MAX(0, GET_CLASS_PROGRESSION(ch) * (class_data[GET_CLASS(ch)].max_pools[MOVE] - base_player_pools[MOVE]) / 100);
+			GET_MAX_MANA(ch) += MAX(0, GET_CLASS_PROGRESSION(ch) * (class_data[GET_CLASS(ch)].max_pools[MANA] - base_player_pools[MANA]) / 100);
 		}
 	}
 
@@ -593,7 +599,7 @@ void affect_total(char_data *ch) {
 	// ability-based modifiers
 	if (!IS_NPC(ch)) {
 		if (HAS_ABILITY(ch, ABIL_ENDURANCE)) {
-			GET_MAX_HEALTH(ch) *= 2;
+			GET_MAX_HEALTH(ch) = MIN(GET_MAX_HEALTH(ch), 1000) * 2.0 + MAX(GET_MAX_HEALTH(ch) - 1000, 0) * 1.25;
 		}
 		if (HAS_ABILITY(ch, ABIL_GIFT_OF_NATURE)) {
 			GET_MAX_MANA(ch) *= 1.35;
@@ -680,13 +686,15 @@ bool affected_by_spell_and_apply(char_data *ch, int type, int apply) {
 * @param int location APPLY_x
 * @param int modifier +/- amount
 * @param bitvector_t bitvector AFF_x
+* @param char_data *cast_by The caster who made the effect (may be NULL; use the person themselves for penalty effects as those won't cleanse).
 * @return struct affected_type* The created af
 */
-struct affected_type *create_aff(int type, int duration, int location, int modifier, bitvector_t bitvector) {
+struct affected_type *create_aff(int type, int duration, int location, int modifier, bitvector_t bitvector, char_data *cast_by) {
 	struct affected_type *af;
 	
 	CREATE(af, struct affected_type, 1);
 	af->type = type;
+	af->cast_by = cast_by ? CAST_BY_ID(cast_by) : 0;
 	af->duration = duration;
 	af->modifier = modifier;
 	af->location = location;
@@ -703,14 +711,16 @@ struct affected_type *create_aff(int type, int duration, int location, int modif
 * @param sh_int damage_type DAM_x type.
 * @param sh_int damage How much damage to do per 5-seconds.
 * @param sh_int max_stack Number of times this can stack when re-applied before it expires.
+* @param sh_int char_data *cast_by The caster.
 */
-void apply_dot_effect(char_data *ch, sh_int type, sh_int duration, sh_int damage_type, sh_int damage, sh_int max_stack) {
+void apply_dot_effect(char_data *ch, sh_int type, sh_int duration, sh_int damage_type, sh_int damage, sh_int max_stack, char_data *cast_by) {
 	struct over_time_effect_type *iter, *dot;
 	bool found = FALSE;
+	int id = (cast_by ? CAST_BY_ID(cast_by) : 0);
 	
 	// first see if they already have one
 	for (iter = ch->over_time_effects; iter && !found; iter = iter->next) {
-		if (iter->type == type && iter->damage_type == damage_type && iter->damage == damage) {
+		if (iter->type == type && iter->cast_by == id && iter->damage_type == damage_type && iter->damage == damage) {
 			// refresh effect
 			iter->duration = MAX(iter->duration, duration);
 			if (iter->stack < MIN(iter->max_stack, max_stack)) {
@@ -726,6 +736,7 @@ void apply_dot_effect(char_data *ch, sh_int type, sh_int duration, sh_int damage
 		ch->over_time_effects = dot;
 		
 		dot->type = type;
+		dot->cast_by = id;
 		dot->duration = duration;
 		dot->damage_type = damage_type;
 		dot->damage = damage;
@@ -1070,7 +1081,7 @@ void perform_dismount(char_data *ch) {
 	REMOVE_BIT(GET_MOUNT_FLAGS(ch), MOUNT_RIDING);
 	
 	if (GET_EQ(ch, WEAR_SADDLE)) {
-		perform_remove(ch, WEAR_SADDLE, FALSE, TRUE);
+		perform_remove(ch, WEAR_SADDLE);
 	}
 }
 
@@ -1209,8 +1220,9 @@ void char_from_room(char_data *ch) {
 */
 void char_to_room(char_data *ch, room_data *room) {
 	extern int determine_best_scale_level(char_data *ch, bool check_group);
-	extern struct instance_data *find_instance_by_room(room_data *room);
+	extern struct instance_data *find_instance_by_room(room_data *room, bool check_homeroom);
 	extern int lock_instance_level(room_data *room, int level);
+	void msdp_update_room(char_data *ch);
 	void spawn_mobs_from_center(room_data *center);
 	
 	int pos;
@@ -1248,7 +1260,7 @@ void char_to_room(char_data *ch, room_data *room) {
 		}
 		
 		// look for an instance to lock
-		if (!IS_NPC(ch) && IS_ADVENTURE_ROOM(room) && (inst = find_instance_by_room(room))) {
+		if (!IS_NPC(ch) && IS_ADVENTURE_ROOM(room) && (inst = find_instance_by_room(room, FALSE))) {
 			if (ADVENTURE_FLAGGED(inst->adventure, ADV_LOCK_LEVEL_ON_ENTER) && !IS_IMMORTAL(ch)) {
 				lock_instance_level(room, determine_best_scale_level(ch, TRUE));
 			}
@@ -1258,6 +1270,9 @@ void char_to_room(char_data *ch, room_data *room) {
 		if (!IS_NPC(ch)) {
 			GET_LAST_ROOM(ch) = GET_ROOM_VNUM(room);
 		}
+		
+		// update location
+		msdp_update_room(ch);
 	}
 }
 
@@ -1385,7 +1400,7 @@ char_data *get_char_room_vis(char_data *ch, char *name) {
 	}
 
 	for (i = ROOM_PEOPLE(IN_ROOM(ch)); i && j <= number && !found; i = i->next_in_room) {
-		if (CAN_SEE(ch, i) && !AFF_FLAGGED(i, AFF_NO_TARGET_IN_ROOM) && MATCH_CHAR_NAME_ROOM(ch, tmp, i)) {
+		if (CAN_SEE(ch, i) && WIZHIDE_OK(ch, i) && !AFF_FLAGGED(i, AFF_NO_TARGET_IN_ROOM) && MATCH_CHAR_NAME_ROOM(ch, tmp, i)) {
 			if (++j == number) {
 				found = i;
 			}
@@ -1450,6 +1465,9 @@ char_data *get_player_vis(char_data *ch, char *name, bitvector_t flags) {
 	for (i = character_list; i && !found; i = i->next) {
 		if (IS_NPC(i))
 			continue;
+		if (IS_SET(flags, FIND_CHAR_ROOM) && !WIZHIDE_OK(ch, i)) {
+			continue;
+		}
 		if (IS_SET(flags, FIND_CHAR_ROOM) && IN_ROOM(i) != IN_ROOM(ch))
 			continue;
 		if (IS_SET(flags, FIND_CHAR_ROOM) && AFF_FLAGGED(i, AFF_NO_TARGET_IN_ROOM))
@@ -2079,6 +2097,28 @@ const char *money_desc(empire_data *type, int amount) {
 }
 
 
+/**
+* Returns the total amount of coin a player has, without regard to type.
+*
+* @param char_data *ch The player.
+* @return int The total number of coins.
+*/
+int total_coins(char_data *ch) {
+	struct coin_data *coin;
+	int total = 0;
+	
+	if (IS_NPC(ch)) {
+		return 0;
+	}
+	
+	for (coin = GET_PLAYER_COINS(ch); coin; coin = coin->next) {
+		SAFE_ADD(total, coin->amount, INT_MIN, INT_MAX, FALSE);
+	}
+
+	return total;
+}
+
+
  //////////////////////////////////////////////////////////////////////////////
 //// COOLDOWN HANDLERS ///////////////////////////////////////////////////////
 
@@ -2183,7 +2223,13 @@ void remove_cooldown_by_type(char_data *ch, int type) {
 * @param room_data *room The room to abandon.
 */
 void abandon_room(room_data *room) {
+	void clear_private_owner(int id);
+	
 	room_data *iter, *next_iter, *home = HOME_ROOM(room);
+	
+	if (ROOM_PRIVATE_OWNER(room) != NOBODY) {
+		clear_private_owner(ROOM_PRIVATE_OWNER(room));
+	}
 	
 	perform_abandon_room(room);
 
@@ -2210,10 +2256,12 @@ void claim_room(room_data *room, empire_data *emp) {
 	room_data *iter, *next_iter;
 	
 	ROOM_OWNER(room) = emp;
+	remove_room_extra_data(room, ROOM_EXTRA_CEDED);	// not ceded if just claimed
 
 	HASH_ITER(interior_hh, interior_world_table, iter, next_iter) {
 		if (HOME_ROOM(iter) == home) {
 			ROOM_OWNER(iter) = emp;
+			remove_room_extra_data(iter, ROOM_EXTRA_CEDED);	// not ceded if just claimed
 		}
 	}
 }
@@ -2377,6 +2425,11 @@ void perform_abandon_room(room_data *room) {
 	if (ROOM_PRIVATE_OWNER(room) != NOBODY) {
 		COMPLEX_DATA(room)->private_owner = NOBODY;
 	}
+	
+	// if a city center is abandoned, destroy it
+	if (IS_CITY_CENTER(room)) {
+		disassociate_building(room);
+	}
 }
 
 
@@ -2439,7 +2492,7 @@ struct empire_city_data *find_city_entry(empire_data *emp, room_data *location) 
 * @return struct empire_city_data* A pointer to the city if match found, NULL otherwise
 */
 struct empire_city_data *find_city_by_name(empire_data *emp, char *name) {
-	struct empire_city_data *city, *found = NULL;
+	struct empire_city_data *city, *abbrev = NULL, *found = NULL;
 	int num = -1, count;
 	
 	if (!emp) {
@@ -2451,13 +2504,17 @@ struct empire_city_data *find_city_by_name(empire_data *emp, char *name) {
 	}
 	
 	count = 0;
-	for (city = EMPIRE_CITY_LIST(emp); city && !found; city = city->next) {
-		if (is_abbrev(name, city->name) || ++count == num) {
+	for (city = EMPIRE_CITY_LIST(emp); city; city = city->next) {
+		if (!str_cmp(name, city->name) || ++count == num) {
 			found = city;
+			break;
+		}
+		else if (is_abbrev(name, city->name)) {
+			abbrev = city;
 		}
 	}
 	
-	return found;
+	return found ? found : abbrev;
 }
 
 
@@ -2820,12 +2877,17 @@ struct help_index_element *find_help_entry(int level, const char *word) {
 
 			if (bot > top) {
 				return NULL;
-				}
+			}
 			else if (!(chk = strn_cmp(word, help_table[mid].keyword, minlen))) {
 				/* trace backwards to find first matching entry. Thanks Jeff Fink! */
 				while ((mid > 0) && (!(chk = strn_cmp(word, help_table[mid - 1].keyword, minlen)))) {
-					mid--;
+					--mid;
 				}
+				// now iterate forward to find the first matching entry the player can use
+				while (mid < top && help_table[mid].level > level && !(chk = strn_cmp(word, help_table[mid + 1].keyword, minlen))) {
+					++mid;
+				}
+				
 				if (level < help_table[mid].level) {
 					return NULL;
 				}
@@ -2853,6 +2915,93 @@ struct help_index_element *find_help_entry(int level, const char *word) {
 //// INTERACTION HANDLERS ////////////////////////////////////////////////////
 
 /**
+* Compares an interaction's chances against an exclusion set. Interactions are
+* exclusive with other interactions that share an exclusion code, and the
+* chance rolls on exclusion sets are cumulative.
+*
+* @param struct interact_exclusion_data **set A pointer to the hash table that holds the data (may add an entry).
+* @param char code The exclusion code (must be a single letter; any empty or invalid code is treated as non-exclusive).
+* @param double percent The percent (0.01-100.00) chance of passing.
+* @return bool TRUE if the interaction succeeds
+*/
+bool check_exclusion_set(struct interact_exclusion_data **set, char code, double percent) {
+	struct interact_exclusion_data *find;
+	
+	// limited set of codes
+	if (!isalpha(code)) {
+		code = 0;
+	}
+	
+	// no exclusion? just roll
+	if (!code) {
+		return (number(1, 10000) <= (percent * 100));
+	}
+	
+	// this 'find' is guaranteed because it makes it if it doesn't exist
+	if ((find = find_exclusion_data(set, code))) {
+		if (find->done) {
+			// already excluded
+			return FALSE;
+		}
+		
+		// add to cumulative percent and check it
+		find->cumulative_value += (percent * 100);
+		if (find->rolled_value <= find->cumulative_value) {
+			find->done = TRUE;
+			return TRUE;
+		}
+		
+		return FALSE;
+	}
+	
+	// just in case
+	return FALSE;
+}
+
+
+/**
+* Finds (or creates) an exclusion entry for a given code. Exclusion codes must
+* be single letters.
+*
+* @param struct interact_exclusion_data **set A pointer to the hash table that holds the data (may add an entry).
+* @param char code The exclusion code (must be a single letter; any empty or invalid code is treated as non-exclusive).
+* @return struct interact_exclusion_data* The exclusion data for that code.
+*/
+struct interact_exclusion_data *find_exclusion_data(struct interact_exclusion_data **set, char code) {
+	struct interact_exclusion_data *find;
+	int val;
+	
+	val = (int) code;
+	HASH_FIND_INT(*set, &val, find);
+	if (!find) {
+		CREATE(find, struct interact_exclusion_data, 1);
+		find->code = (int) code;
+		// this rolls now -- rolls are for the entire exclusion set
+		find->rolled_value = number(1, 10000);
+		find->cumulative_value = 0;
+		find->done = FALSE;
+		HASH_ADD_INT(*set, code, find);
+	}
+	
+	return find;
+}
+
+
+/**
+* Free a set of exclusion data.
+* 
+* @param struct interact_exclusion_data *list The list to free.
+*/
+void free_exclusion_data(struct interact_exclusion_data *list) {
+	struct interact_exclusion_data *iter, *next;
+	HASH_ITER(hh, list, iter, next) {
+		HASH_DEL(list, iter);
+		free(iter);
+	}
+}
+
+
+/**
 * @param struct interaction_item *list The list to check.
 * @param int type The INTERACT_x type to check for.
 * @return bool TRUE if at least one interaction of that type is in the list.
@@ -2872,6 +3021,66 @@ bool has_interaction(struct interaction_item *list, int type) {
 
 
 /**
+* Attempts to run global mob interactions -- interactions from the globals table.
+*
+* @param char_data *ch The player who is interacting.
+* @param char_data *mob The NPC being interacted-with.
+* @param int type Any INTERACT_x const.
+* @param INTERACTION_FUNC(*func) A callback function to run for the interaction.
+*/
+bool run_global_mob_interactions(char_data *ch, char_data *mob, int type, INTERACTION_FUNC(*func)) {
+	extern adv_data *get_adventure_for_vnum(rmt_vnum vnum);
+	
+	struct global_data *glb, *next_glb;
+	bool any = FALSE;
+	adv_data *adv;
+	
+	// no work
+	if (!ch || !mob || !IS_NPC(mob) || !func) {
+		return FALSE;
+	}
+	
+	adv = get_adventure_for_vnum(GET_MOB_VNUM(mob));
+
+	HASH_ITER(hh, globals_table, glb, next_glb) {
+		if (GET_GLOBAL_TYPE(glb) != GLOBAL_MOB_INTERACTIONS) {
+			continue;
+		}
+		if (IS_SET(GET_GLOBAL_FLAGS(glb), GLB_FLAG_IN_DEVELOPMENT)) {
+			continue;
+		}
+		
+		// level limits
+		if (GET_GLOBAL_MIN_LEVEL(glb) > 0 && GET_CURRENT_SCALE_LEVEL(mob) < GET_GLOBAL_MIN_LEVEL(glb)) {
+			continue;
+		}
+		if (GET_GLOBAL_MAX_LEVEL(glb) > 0 && GET_CURRENT_SCALE_LEVEL(mob) > GET_GLOBAL_MAX_LEVEL(glb)) {
+			continue;
+		}
+		
+		// match ALL type-flags
+		if ((MOB_FLAGS(mob) & GET_GLOBAL_TYPE_FLAGS(glb)) != GET_GLOBAL_TYPE_FLAGS(glb)) {
+			continue;
+		}
+		// match ZERO type-excludes
+		if ((MOB_FLAGS(mob) & GET_GLOBAL_TYPE_EXCLUDE(glb)) != 0) {
+			continue;
+		}
+		
+		// check adventure-only -- late-matching because it does more work than other conditions
+		if (IS_SET(GET_GLOBAL_FLAGS(glb), GLB_FLAG_ADVENTURE_ONLY) && get_adventure_for_vnum(GET_GLOBAL_VNUM(glb)) != adv) {
+			continue;
+		}
+		
+		// we have a match!
+		any |= run_interactions(ch, GET_GLOBAL_INTERACTIONS(glb), type, IN_ROOM(ch), mob, NULL, func);
+	}
+	
+	return any;
+}
+
+
+/**
 * Runs a set of interactions and passes successful ones through to a function
 * pointer.
 *
@@ -2882,34 +3091,23 @@ bool has_interaction(struct interaction_item *list, int type) {
 * @param char_data *inter_mob For mob interactions, the mob.
 * @param obj_data *inter_item For item interactions, the item.
 * @param INTERACTION_FUNC(*func) A function pointer that runs each successful interaction (func returns TRUE if an interaction happens; FALSE if it aborts)
-* @param bool *hit_exclusive A bool pointer to store whether or not we hit an exclusive.
 * @return bool TRUE if any interactions ran successfully, FALSE if not.
 */
-bool run_interactions(char_data *ch, struct interaction_item *run_list, int type, room_data *inter_room, char_data *inter_mob, obj_data *inter_item, INTERACTION_FUNC(*func), bool *hit_exclusive) {
+bool run_interactions(char_data *ch, struct interaction_item *run_list, int type, room_data *inter_room, char_data *inter_mob, obj_data *inter_item, INTERACTION_FUNC(*func)) {
+	struct interact_exclusion_data *exclusion = NULL;
 	struct interaction_item *interact;
-	bool this, success = FALSE;
-	
-	*hit_exclusive = FALSE;
+	bool success = FALSE;
 
 	for (interact = run_list; interact; interact = interact->next) {
-		this = FALSE;
-		
-		if (CHECK_INTERACT(interact, type)) {
+		if (interact->type == type && check_exclusion_set(&exclusion, interact->exclusion_code, interact->percent)) {
 			if (func) {
 				// run function
-				this = (func)(ch, interact, inter_room, inter_mob, inter_item);
-			}
-			
-			success |= this;
-			
-			// there can be only one?
-			if (this && interact->exclusive) {
-				*hit_exclusive = TRUE;
-				break;
+				success |= (func)(ch, interact, inter_room, inter_mob, inter_item);
 			}
 		}
 	}
-
+	
+	free_exclusion_data(exclusion);
 	return success;
 }
 
@@ -2922,33 +3120,32 @@ bool run_interactions(char_data *ch, struct interaction_item *run_list, int type
 * @param room_data *room The location to run on.
 * @param int type Any INTERACT_x const.
 * @param INTERACTION_FUNC(*func) A function pointer that runs each successful interaction (func returns TRUE if an interaction happens; FALSE if it aborts)
-* @param bool *hit_exclusive A bool pointer to store whether or not we hit an exclusive.
 * @return bool TRUE if any interactions ran successfully, FALSE if not.
 */
-bool run_room_interactions(char_data *ch, room_data *room, int type, INTERACTION_FUNC(*func), bool *hit_exclusive) {
+bool run_room_interactions(char_data *ch, room_data *room, int type, INTERACTION_FUNC(*func)) {
 	bool success;
 	crop_data *crop;
 	
-	success = *hit_exclusive = FALSE;
+	success = FALSE;
 	
 	// building first
-	if (!*hit_exclusive && GET_BUILDING(room)) {
-		success |= run_interactions(ch, GET_BLD_INTERACTIONS(GET_BUILDING(room)), type, room, NULL, NULL, func, hit_exclusive);
+	if (!success && GET_BUILDING(room)) {
+		success |= run_interactions(ch, GET_BLD_INTERACTIONS(GET_BUILDING(room)), type, room, NULL, NULL, func);
 	}
 	
 	// crop second
-	if (!*hit_exclusive && ROOM_CROP_TYPE(room) != NOTHING && (crop = crop_proto(ROOM_CROP_TYPE(room)))) {
-		success |= run_interactions(ch, GET_CROP_INTERACTIONS(crop), type, room, NULL, NULL, func, hit_exclusive);
+	if (!success && ROOM_CROP_TYPE(room) != NOTHING && (crop = crop_proto(ROOM_CROP_TYPE(room)))) {
+		success |= run_interactions(ch, GET_CROP_INTERACTIONS(crop), type, room, NULL, NULL, func);
 	}
 	
 	// rmt third
-	if (!*hit_exclusive && GET_ROOM_TEMPLATE(room)) {
-		success |= run_interactions(ch, GET_RMT_INTERACTIONS(GET_ROOM_TEMPLATE(room)), type, room, NULL, NULL, func, hit_exclusive);
+	if (!success && GET_ROOM_TEMPLATE(room)) {
+		success |= run_interactions(ch, GET_RMT_INTERACTIONS(GET_ROOM_TEMPLATE(room)), type, room, NULL, NULL, func);
 	}
 	
 	// sector fourth
-	if (!*hit_exclusive) {
-		success |= run_interactions(ch, GET_SECT_INTERACTIONS(SECT(room)), type, room, NULL, NULL, func, hit_exclusive);
+	if (!success) {
+		success |= run_interactions(ch, GET_SECT_INTERACTIONS(SECT(room)), type, room, NULL, NULL, func);
 	}
 	
 	return success;
@@ -3186,6 +3383,11 @@ void expand_mob_tags(char_data *mob) {
 				}
 			}
 		}
+		else {
+			if (!find_id_in_tag_list(tag->idnum, new_list)) {
+				add_mob_tag(tag->idnum, &new_list);
+			}
+		}
 	}
 	
 	free_mob_tags(&MOB_TAGGED_BY(mob));
@@ -3272,6 +3474,7 @@ obj_data *copy_warehouse_obj(obj_data *input) {
 	extern struct extra_descr_data *copy_extra_descs(struct extra_descr_data *list);
 
 	obj_data *obj, *proto;
+	trig_data *trig;
 	int iter;
 	
 	if (!input) {
@@ -3283,8 +3486,7 @@ obj_data *copy_warehouse_obj(obj_data *input) {
 	
 	// create dupe
 	if (proto) {
-		obj = read_object(GET_OBJ_VNUM(input));
-		
+		obj = read_object(GET_OBJ_VNUM(input), FALSE);	// no scripts
 	}
 	else {
 		obj = create_obj();
@@ -3293,6 +3495,19 @@ obj_data *copy_warehouse_obj(obj_data *input) {
 	// error in either case?
 	if (!obj) {
 		return NULL;
+	}
+	
+	// copy only existing scripts
+	if (SCRIPT(input)) {
+		if (!SCRIPT(obj)) {
+			CREATE(SCRIPT(obj), struct script_data, 1);
+		}
+
+		for (trig = TRIGGERS(SCRIPT(input)); trig; trig = trig->next) {
+			add_trigger(SCRIPT(obj), read_trigger(GET_TRIG_VNUM(trig)), -1);
+		}
+		
+		// TODO should also copy variables, if they have been made to save to file yet
 	}
 	
 	// pointer copies
@@ -3340,21 +3555,30 @@ obj_data *copy_warehouse_obj(obj_data *input) {
 * @param obj_data *obj The object to empty.
 */
 void empty_obj_before_extract(obj_data *obj) {
+	void get_check_money(char_data *ch, obj_data *obj);
+	
 	obj_data *jj, *next_thing;
 	
 	for (jj = obj->contains; jj; jj = next_thing) {
 		next_thing = jj->next_content;		/* Next in inventory */
 
-		if (obj->in_obj)
+		if (obj->in_obj) {
 			obj_to_obj(jj, obj->in_obj);
-		else if (obj->carried_by)
+		}
+		else if (obj->carried_by) {
 			obj_to_char(jj, obj->carried_by);
-		else if (obj->worn_by)
+			get_check_money(obj->carried_by, jj);
+		}
+		else if (obj->worn_by) {
 			obj_to_char(jj, obj->worn_by);
-		else if (IN_ROOM(obj))
+			get_check_money(obj->worn_by, jj);
+		}
+		else if (IN_ROOM(obj)) {
 			obj_to_room(jj, IN_ROOM(obj));
-		else
+		}
+		else {
 			extract_obj(jj);
+		}
 	}
 }
 
@@ -3396,6 +3620,97 @@ void extract_obj(obj_data *obj) {
 	}
 
 	free_obj(obj);
+}
+
+
+/**
+* Makes a fresh copy of an object, preserving certain flags such as superior
+* and keep. All temporary properties including bindings are copied over. You
+* can swap it out using swap_obj_for_obj() or any other method, then extract
+* the original object when done.
+*
+* @param obj_data *obj The item to load a fresh copy of.
+* @param int scale_level If >0, will scale the new copy to that level.
+* @return obj_data* The new object.
+*/
+obj_data *fresh_copy_obj(obj_data *obj, int scale_level) {
+	struct obj_binding *bind;
+	obj_data *proto, *new;
+	
+	if (!obj || !(proto = obj_proto(GET_OBJ_VNUM(obj)))) {
+		// get a normal 'bug' object
+		return read_object(0, TRUE);
+	}
+
+	new = read_object(GET_OBJ_VNUM(obj), TRUE);
+	
+	// preserve some flags
+	GET_OBJ_EXTRA(new) |= GET_OBJ_EXTRA(obj) & (OBJ_SUPERIOR | OBJ_KEEP);
+	if (!OBJ_FLAGGED(new, OBJ_GENERIC_DROP)) {
+		GET_OBJ_EXTRA(new) |= GET_OBJ_EXTRA(obj) & (OBJ_HARD_DROP | OBJ_GROUP_DROP);
+	}
+	
+	// copy bindings	
+	for (bind = OBJ_BOUND_TO(obj); bind; bind = bind->next) {
+		add_obj_binding(bind->idnum, &OBJ_BOUND_TO(new));
+	}
+	
+	GET_OBJ_TIMER(new) = GET_OBJ_TIMER(obj);
+	GET_AUTOSTORE_TIMER(new) = GET_AUTOSTORE_TIMER(obj);
+	new->stolen_timer = obj->stolen_timer;
+	new->last_owner_id = obj->last_owner_id;
+	new->last_empire_id = obj->last_empire_id;
+	
+	// custom strings?
+	if (GET_OBJ_SHORT_DESC(obj) && GET_OBJ_SHORT_DESC(obj) != GET_OBJ_SHORT_DESC(proto)) {
+		GET_OBJ_SHORT_DESC(new) = str_dup(GET_OBJ_SHORT_DESC(obj));
+	}
+	if (GET_OBJ_LONG_DESC(obj) && GET_OBJ_LONG_DESC(obj) != GET_OBJ_LONG_DESC(proto)) {
+		GET_OBJ_LONG_DESC(new) = str_dup(GET_OBJ_LONG_DESC(obj));
+	}
+	if (GET_OBJ_KEYWORDS(obj) && GET_OBJ_KEYWORDS(obj) != GET_OBJ_KEYWORDS(proto)) {
+		GET_OBJ_KEYWORDS(new) = str_dup(GET_OBJ_KEYWORDS(obj));
+	}
+	if (GET_OBJ_ACTION_DESC(obj) && GET_OBJ_ACTION_DESC(obj) != GET_OBJ_ACTION_DESC(proto)) {
+		GET_OBJ_ACTION_DESC(new) = str_dup(GET_OBJ_ACTION_DESC(obj));
+	}
+	
+	// certain things that must always copy over
+	switch (GET_OBJ_TYPE(new)) {
+		case ITEM_ARROW: {
+			GET_OBJ_VAL(new, VAL_ARROW_QUANTITY) = GET_OBJ_VAL(obj, VAL_ARROW_QUANTITY);
+			break;
+		}
+		case ITEM_BOOK: {
+			GET_OBJ_VAL(new, VAL_BOOK_ID) = GET_OBJ_VAL(obj, VAL_BOOK_ID);
+			break;
+		}
+		case ITEM_DRINKCON: {
+			GET_OBJ_VAL(new, VAL_DRINK_CONTAINER_CONTENTS) = GET_OBJ_VAL(obj, VAL_DRINK_CONTAINER_CONTENTS);
+			GET_OBJ_VAL(new, VAL_DRINK_CONTAINER_TYPE) = GET_OBJ_VAL(obj, VAL_DRINK_CONTAINER_TYPE);
+			break;
+		}
+		case ITEM_PORTAL: {
+			GET_OBJ_VAL(new, VAL_PORTAL_TARGET_VNUM) = GET_OBJ_VAL(obj, VAL_PORTAL_TARGET_VNUM);
+			break;
+		}
+		case ITEM_POISON: {
+			GET_OBJ_VAL(new, VAL_POISON_CHARGES) = GET_OBJ_VAL(obj, VAL_POISON_CHARGES);
+			break;
+		}
+		case ITEM_SHIP: {
+			GET_OBJ_VAL(new, VAL_SHIP_RESOURCES_REMAINING) = GET_OBJ_VAL(obj, VAL_SHIP_RESOURCES_REMAINING);
+			GET_OBJ_VAL(new, VAL_SHIP_MAIN_ROOM) = GET_OBJ_VAL(obj, VAL_SHIP_MAIN_ROOM);
+			break;
+		}
+	}
+	
+
+	if (scale_level > 0) {
+		scale_item_to_level(new, scale_level);
+	}
+	
+	return new;
 }
 
 
@@ -3664,8 +3979,6 @@ void check_obj_in_void(obj_data *obj) {
 * @param int pos the WEAR_x spot to it
 */
 void equip_char(char_data *ch, obj_data *obj, int pos) {
-	void scale_item_to_level(obj_data *obj, int level);
-	
 	int j;
 
 	if (pos < 0 || pos >= NUM_WEARS) {
@@ -3691,11 +4004,6 @@ void equip_char(char_data *ch, obj_data *obj, int pos) {
 		GET_EQ(ch, pos) = obj;
 		obj->worn_by = ch;
 		obj->worn_on = pos;
-
-		// update gear level for characters
-		if (!IS_NPC(ch) && wear_data[pos].count_stats) {
-			GET_GEAR_LEVEL(ch) += rate_item(obj);
-		}
 
 		// lights?
 		if (IN_ROOM(ch) && OBJ_FLAGGED(obj, OBJ_LIGHT)) {
@@ -3834,7 +4142,7 @@ void obj_to_char(obj_data *object, char_data *ch) {
 		}
 		
 		// update last owner/empire -- only if not stolen
-		if (time(0) - GET_STOLEN_TIMER(object) > config_get_int("stolen_object_timer") * SECS_PER_REAL_MIN) {
+		if (!IS_STOLEN(object)) {
 			if (IS_NPC(ch)) {
 				object->last_owner_id = NOBODY;
 				object->last_empire_id = NOTHING;
@@ -3864,7 +4172,7 @@ void obj_to_char(obj_data *object, char_data *ch) {
 * @param char_data *ch The person to try to give it to.
 */
 void obj_to_char_or_room(obj_data *obj, char_data *ch) {
-	if (IS_CARRYING_N(ch) + GET_OBJ_INVENTORY_SIZE(obj) > CAN_CARRY_N(ch) && IN_ROOM(ch)) {
+	if (!IS_NPC(ch) && IS_CARRYING_N(ch) + GET_OBJ_INVENTORY_SIZE(obj) > CAN_CARRY_N(ch) && IN_ROOM(ch)) {
 		// bind it to the player anyway, as if they received it, if it's BoP
 		if (OBJ_FLAGGED(obj, OBJ_BIND_ON_PICKUP)) {
 			bind_obj_to_player(obj, ch);
@@ -3878,7 +4186,7 @@ void obj_to_char_or_room(obj_data *obj, char_data *ch) {
 		}
 		
 		// set ownership as if they got it -- if not stolen
-		if (time(0) - GET_STOLEN_TIMER(obj) > config_get_int("stolen_object_timer") * SECS_PER_REAL_MIN) {
+		if (!IS_STOLEN(obj)) {
 			if (IS_NPC(ch)) {
 				obj->last_owner_id = NOBODY;
 				obj->last_empire_id = NOTHING;
@@ -4011,11 +4319,6 @@ obj_data *unequip_char(char_data *ch, int pos) {
 		obj = GET_EQ(ch, pos);
 		obj->worn_by = NULL;
 		obj->worn_on = NO_WEAR;
-		
-		// adjust gear level
-		if (!IS_NPC(ch) && wear_data[pos].count_stats) {
-			GET_GEAR_LEVEL(ch) -= rate_item(obj);
-		}
 
 		// adjust lights
 		if (IN_ROOM(ch) && OBJ_FLAGGED(obj, OBJ_LIGHT)) {
@@ -4045,18 +4348,12 @@ obj_data *unequip_char(char_data *ch, int pos) {
 *
 * @param char_data *ch The person to unequip
 * @param int pos The WEAR_x slot to remove
-* @param bool droppable If TRUE, checks that ch can carry the item, or else puts it in the room and sends a message
 */
-void unequip_char_to_inventory(char_data *ch, int pos, bool droppable) {
+void unequip_char_to_inventory(char_data *ch, int pos) {
 	obj_data *obj = unequip_char(ch, pos);
 	
 	if (OBJ_FLAGGED(obj, OBJ_SINGLE_USE)) {
 		extract_obj(obj);
-	}
-	else if (droppable && !IS_IMMORTAL(ch) && IN_ROOM(ch) && IS_CARRYING_N(ch) + GET_OBJ_INVENTORY_SIZE(obj) > CAN_CARRY_N(ch)) {
-		act("... your inventory is full and you drop it.", FALSE, ch, obj, NULL, TO_CHAR);
-		act("... $s inventory is full and $e drops it.", TRUE, ch, obj, NULL, TO_ROOM);
-		obj_to_room(obj, IN_ROOM(ch));
 	}
 	else {
 		obj_to_char(obj, ch);
@@ -4366,6 +4663,98 @@ obj_data *get_obj_world(char *name) {
 	}
 
 	return found;
+}
+
+
+ //////////////////////////////////////////////////////////////////////////////
+//// OFFER HANDLERS //////////////////////////////////////////////////////////
+
+/**
+* Adds an offer to ch. This is used by do_accept. This function does not send
+* messages. This will overwrite a previous identical entry.
+*
+* @param char_data *ch The person who is getting an offer.
+* @param char_data *from The person sending the offer.
+* @param int type Any OFFER_x type.
+* @param int data A misc integer that may be passed based on type (use 0 for none).
+* @return struct offer_data* A pointer to the attached new offer, if it succeeds.
+*/
+struct offer_data *add_offer(char_data *ch, char_data *from, int type, int data) {
+	struct offer_data *iter, *offer = NULL;
+	
+	if (!ch || !from || IS_NPC(ch) || IS_NPC(from)) {
+		return NULL;
+	}
+	
+	// ensure no existing offer (overwrite if so)
+	for (iter = GET_OFFERS(ch); iter; iter = iter->next) {
+		if (iter->type == type && iter->from == GET_IDNUM(from)) {
+			offer = iter;
+			break;
+		}
+	}
+	
+	if (!offer) {
+		CREATE(offer, struct offer_data, 1);
+		offer->next = GET_OFFERS(ch);
+		GET_OFFERS(ch) = offer;
+	}
+	
+	offer->from = GET_IDNUM(from);
+	offer->type = type;
+	offer->location = IN_ROOM(from) ? GET_ROOM_VNUM(IN_ROOM(from)) : NOWHERE;
+	offer->time = time(0);
+	offer->data = data;
+	
+	return offer;
+}
+
+
+/**
+* Removes any expired offers the character may have.
+*
+* @param char_data *ch The player to clean up offers for.
+*/
+void clean_offers(char_data *ch) {
+	struct offer_data *offer, *next_offer, *temp;
+	int max_duration = config_get_int("offer_time");
+	
+	if (!ch || IS_NPC(ch)) {
+		return;
+	}
+	
+	for (offer = GET_OFFERS(ch); offer; offer = next_offer) {
+		next_offer = offer->next;
+		
+		if (time(0) - offer->time > max_duration) {
+			REMOVE_FROM_LIST(offer, GET_OFFERS(ch), next);
+			free(offer);
+		}
+	}
+}
+
+
+/**
+* Removes all offers of a given type.
+*
+* @param char_data *ch The person whose offers to remove.
+* @param int type Any OFFER_x type.
+*/
+void remove_offers_by_type(char_data *ch, int type) {
+	struct offer_data *offer, *next_offer, *temp;
+	
+	if (!ch || IS_NPC(ch)) {
+		return;
+	}
+	
+	for (offer = GET_OFFERS(ch); offer; offer = next_offer) {
+		next_offer = offer->next;
+		
+		if (offer->type == type) {
+			REMOVE_FROM_LIST(offer, GET_OFFERS(ch), next);
+			free(offer);
+		}
+	}
 }
 
 
@@ -4980,6 +5369,37 @@ bool delete_stored_resource(empire_data *emp, obj_vnum vnum) {
 
 
 /**
+* Finds empire storage on a given island by item keyword.
+* 
+* @param empire_data *emp The empire whose storage to search.
+* @param int island_id Which island to look on.
+* @param char *keywords The keyword(s) to match using multi_isname().
+* @return struct empire_storage_data* The storage entry, or NULL if no matches.
+*/
+struct empire_storage_data *find_island_storage_by_keywords(empire_data *emp, int island_id, char *keywords) {
+	struct empire_storage_data *store;
+	obj_data *proto;
+	
+	for (store = EMPIRE_STORAGE(emp); store; store = store->next) {
+		if (store->island != island_id) {
+			continue;
+		}
+		if (!(proto = obj_proto(store->vnum))) {
+			continue;
+		}
+		if (!multi_isname(keywords, GET_OBJ_KEYWORDS(proto))) {
+			continue;
+		}
+		
+		// found!
+		return store;
+	}
+	
+	return NULL;
+}
+
+
+/**
 * This is used by the einv sorter (sort_storage) to sort by storage locations,
 * where the order of the storage locations on the object won't matter. The
 * return value is not significant other than it can be used to compare two
@@ -5027,10 +5447,12 @@ struct empire_storage_data *find_stored_resource(empire_data *emp, int island, o
 *
 * @param empire_data *emp The empire to check.
 * @param obj_vnum vnum The item to look for.
+* @param bool count_shipping If TRUE, also count items in the shipping system.
 * @return int The total number the empire has stored.
 */
-int get_total_stored_count(empire_data *emp, obj_vnum vnum) {
+int get_total_stored_count(empire_data *emp, obj_vnum vnum, bool count_shipping) {
 	struct empire_storage_data *sto;
+	struct shipping_data *shipd;
 	int count = 0;
 	
 	if (!emp) {
@@ -5039,7 +5461,15 @@ int get_total_stored_count(empire_data *emp, obj_vnum vnum) {
 	
 	for (sto = EMPIRE_STORAGE(emp); sto; sto = sto->next) {
 		if (sto->vnum == vnum) {
-			count += sto->amount;
+			SAFE_ADD(count, sto->amount, INT_MIN, INT_MAX, TRUE);
+		}
+	}
+	
+	if (count_shipping) {
+		for (shipd = EMPIRE_SHIPPING_LIST(emp); shipd; shipd = shipd->next) {
+			if (shipd->vnum == vnum) {
+				SAFE_ADD(count, shipd->amount, INT_MIN, INT_MAX, TRUE);
+			}
 		}
 	}
 	
@@ -5115,7 +5545,7 @@ bool retrieve_resource(char_data *ch, empire_data *emp, struct empire_storage_da
 		return FALSE;
 	}
 
-	obj = read_object(store->vnum);
+	obj = read_object(store->vnum, TRUE);
 	available = store->amount - 1;	// for later
 	charge_stored_resource(emp, GET_ISLAND_ID(IN_ROOM(ch)), store->vnum, 1);
 

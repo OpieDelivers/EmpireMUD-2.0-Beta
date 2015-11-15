@@ -29,6 +29,7 @@ City Teleportation (High Sorcery ability)
 
 Usage:  ritual teleport <city>
 Cooldown:  15 minutes
+Cost:  15 mana
 
 This ability expands your teleport power to any of your empire's cities. You
 can use the city's name or number. Use "city list" to see available cities.
@@ -43,21 +44,29 @@ Colorburst (High Sorcery ability)
 
 Usage:  colorburst [victim]
 Cooldown:  30 seconds
+Cost:  15 / 30 / 45 mana
+Debuff type:  High Sorcery
 
-Shoot a disorienting burst of color at your foe. This effect gives -10% to-hit
-for 30 seconds.
+Shoot a disorienting burst of color at your foe and makes it harder for them
+to hit you. Colorburst causes a to-hit penalty of -5, -10, or -20 depending
+on your skill level, with a bonus based on your Intelligence.
 
 In combat, colorburst will automatically target your current opponent if you
 do not provide a target.
+
+See also: TO-HIT
 #
-"DEVASTATION RITUAL"
+"DEVASTATION RITUAL" "RITUAL OF DEVASTATION" DEVASTATE
 
 Devastation Ritual (High Sorcery ability)
 
 Usage:  ritual devastation
+Cost:  15 mana (per cycle)
 
 This ritual allows a sorcerer to quickly clear a large area of land through
-ritual magic. It will bring down forests and crops within 3 tiles of the caster.
+ritual magic. It will bring down forests and crops within 3 tiles of the
+caster, one resource at a time, repeating until it completes (or until you run
+out of mana). These resources are transferred to the caster.
 
 See also: RITUAL
 #
@@ -80,6 +89,7 @@ Dispel (High Sorcery ability)
 
 Usage:  dispel [target]
 Cooldown:  9 seconds
+Cost:  30 mana
 
 This spell removes any magical or fire-based damage-over-time effects on the
 target.
@@ -95,7 +105,8 @@ Usage:  enchant <item> <type>
 Powerful sorcerers learn to enchant ordinary items to increase their useful-
 ness and power. You may only enchant items that are not already enchanted. The
 level and strength of the enchantment are based on both the level of the item
-and the level of the enchanter.
+and the crafting level of the enchanter. If the enchanter's gear level is
+better than his/her crafting level, that is used instead.
 
 Enchant Weapons:
   striking - strength, to-hit  (5 bloodstones)
@@ -103,6 +114,7 @@ Enchant Weapons:
   wisdom - intelligence, mana regen  (5 glowing seashells)
   accuracy - to-hit  (5 bloodstones)
   awareness - wits, to-hit  (5 blue irises)
+  deflection - dodge, block (5 lightning stones)
   manaspring (offhand) - mana regen, max mana (5 blue irises)
   healing (offhand) - bonus healing, mana regen (5 glowing seashells)
   fury (offhand) - bonus magical, mana regen (5 lightning stone)
@@ -115,16 +127,19 @@ Enchant Armor:
   regeneration - health regen  (5 blue irises)
   longrunning - move regen  (5 lightning stones)
   energy - mana regen  (5 blue irises)
-  protection - soak  (5 glowing seashells)
+  protection - resist-physical  (5 glowing seashells)
   evasion - dodge  (5 lightning stones)
   rage - strength  (5 bloodstones)
   power - intelligence  (5 glowing seashells)
+  spellwarding - resist-magical (5 blue irises)
+  focus - to-hit (5 bloodstones)
+  acrobatics - dexterity (5 lightning stones)
   blocking (shield) - block  (5 lightning stones)
 
 Enchant Tools:
   embiggening (pack) - capacity  (1 of each of the 4 gems)
 
-See also: GREATER ENCHANTMENTS
+See also: CRAFTING LEVEL, GREATER ENCHANTMENTS
 #
 ENERVATE
 
@@ -132,6 +147,8 @@ Enervate (High Sorcery ability)
 
 Usage:  enervate <victim>
 Cooldown:  75 seconds
+Cost:  20 mana
+Debuff type:  High Sorcery
 
 Your victim is enervated: he loses move regen. You are able to leech some
 of this for yourself, and your move regeneration receive a temporary boost.
@@ -143,9 +160,11 @@ FORESIGHT
 Foresight (High Sorcery ability)
 
 Usage:  foresight [person]
+Cost:  30 mana
 
-When granted the gift of foresight, a person gains +10% chance to dodge as
-she begins to see the arc of an opponent's weapon before it strikes.
+When granted the gift of foresight, a person gains +5, +10, or +15 Dodge
+(based on skill, modified by Intelligence) as she begins to see the arc of an
+opponent's weapon before it strikes.
 
 Gain skill by casting foresight or by fighting while it is active on you.
 
@@ -164,21 +183,23 @@ MANASHIELD "MANA SHIELD"
 Manashield (High Sorcery ability)
 
 Usage:  manashield
+Cost:  25 mana*
 
 By armoring herself with a manashield, a sorcerer sacrifices part of her mana
 pool for reduced combat damage.
 
-Mana Shield reduces your mana by 25 (this effect is doubled by Gift of Nature).
+Mana Shield reduces your mana by 25 (this effect is modified by abilities which
+change your mana pool size, such as Gift of Nature).
 
 Gain skill by fighting while manashielded.
-
-See also: GIFT OF NATURE
 #
 MIRRORIMAGE "MIRROR IMAGE"
 
 Mirrorimage (High Sorcery ability)
 
 Usage:  mirrorimage
+Cooldown:  5 minutes
+Cost:  40 mana
 
 This spell creates an identical duplicate of the caster (with reduced health).
 It's good enough to fool at least one of the people hitting you.
@@ -192,6 +213,7 @@ See also: FAMILIAR, DISMISS, ORDER
 Phoenix Rite (High Sorcery ability)
 
 Usage:  rite phoenix
+Cost:  25 mana
 
 A master sorcerer can resurrect herself upon death by preparing properly. Once
 performed, the Phoenix Rite does not expire until it saves you from death.
@@ -199,7 +221,7 @@ performed, the Phoenix Rite does not expire until it saves you from death.
 When you are restored from death, you will have 20% of your health and at least
 20% each of blood, mana, and moves.
 
-You can re-cast the ritual to gain skill, but it will give you a skill point
+You can re-cast the ritual to gain skill, but it will level your High Sorcery
 when it saves you as well.
 
 See also: RITUAL
@@ -208,12 +230,14 @@ See also: RITUAL
 
 Portal Magic (High Sorcery ability)
 
-Learning portal magic allows you to create portal nodes, and allows members of
-your empire to use them. These portals can only connect two locations on the
-same island or continent, unless you have a Portal Master in the empire.
+Learning portal magic allows you to create portal nodes, craft nexus crystals,
+and allows members of your empire to use them. These portals can only connect
+two locations on the same island or continent, unless you have a Portal Master
+in the empire.
 
 A "portal mage" is a person with the Portal Magic ability. Without a portal
-mage in your empire, you cannot use portal buildings.
+mage in your empire, you cannot use portal buildings. Portal mages only get
+four minutes of portal sickness instead of five.
 
 You can gain Portal Magic skill whenever someone in your empire uses your
 portal magic to open a portal.
@@ -225,6 +249,7 @@ See also: PORTAL, PORTAL MASTER
 Portal Master (High Sorcery ability)
 
 Command:  collapse <portal>
+Cost:  15 mana
 
 Becoming a Portal Master removes the range limit on your empire's portals.
 It also allows you to collapse portals yourself.
@@ -247,6 +272,7 @@ rituals to learn more about them.
 Ritual of Burdens (High Sorcery ability)
 
 Usage:  ritual burdens
+Cost:  5 mana
 
 This ritual allows you to carry 6, 12, or 18 more items (based on your level).
 
@@ -259,7 +285,7 @@ See also: RITUAL
 Ritual of Defense (High Sorcery ability)
 
 Usage:  ritual defense
-Cost: 1 imperium spike and 1 bloodstone per wall
+Cost:  15 mana; 1 imperium spike and 1 bloodstone per wall
 
 This ritual enchants a wall to be able to repel anyone flying. It also works
 on gatehouses and river gates. It will go away if you dismantle the building
@@ -275,6 +301,7 @@ See also: RITUAL
 Ritual of Detection (High Sorcery ability)
 
 Usage:  ritual detection
+Cost:  15 mana
 
 This ability finds all players currently in your city, whether hidden, earth-
 melded, invisible, or any other condition. This ability only works inside of a
@@ -287,6 +314,7 @@ See also: RITUAL
 Ritual of Sense Life (High Sorcery skill)
 
 Usage:  ritual senselife
+Cost:  15 mana
 
 This spell works similar to the "search ability" and can find people hidden
 in the room with you, using simple magic.
@@ -299,6 +327,7 @@ Ritual of Teleportation (High Sorcery skill)
 
 Usage:  ritual teleportation [target]
 Cooldown:  15 minutes (teleport home only)
+Cost:  25 mana
 
 With the basic teleportation ability, you can teleport at random (2 to 7 map
 tiles in any direction) or you can teleport to your home. You won't be able to
@@ -313,6 +342,7 @@ See also: CITY TELEPORTATION, RITUAL
 Siege Ritual (High Sorcery ability)
 
 Usage:  ritual siege <direction>
+Cost:  30 mana
 
 This powerful ability is rivaled only by the catapult in its ability to take
 down buildings. Use it to destroy your enemies!
@@ -328,9 +358,12 @@ Siphon (High Sorcery ability)
 
 Usage:  siphon [victim]
 Cooldown:  20 seconds
+Cost:  10 mana
+Debuff type:  High Sorcery
 
-You can steal mana from other using the mana siphon ability. If you are in
-combat, it will automatically target your current opponent.
+You can steal mana from other casters using the mana siphon ability. If you are
+in combat, it will automatically target your current opponent. This will boost
+your own mana regen while dropping theirs significantly.
 #
 SLOW
 
@@ -338,6 +371,8 @@ Slow (High Sorcery ability)
 
 Usage:  slow [victim]
 Cooldown:  75 seconds
+Cost:  20 mana
+Debuff type:  High Sorcery
 
 This ability hexes your victim with lethargy, causing them to attack more
 slowly in combat. If you're already fighting and do not specify a victim, it
@@ -377,7 +412,8 @@ STUDY
 Usage:  study
 
 By sitting down to study High Sorcery, you can begin to unlock its secrets.
-You must do this on the top floor of a Tower of Sorcery.
+You must do this on the top floor of a Tower of Sorcery. You can only gain
+your first level by studying in this way.
 
 See also: HIGH SORCERY, SORCERY TOWER
 #
@@ -390,6 +426,11 @@ Usage:  summon materials [number] <keywords>
 This ability actually allows the sorcerer to open a tiny portal to the empire's
 storage buildings, and pull out the materials he needs. There is no range on
 this ability, and it may be used to grab as many items as the sorcerer wishes.
+
+You cannot summon items out of the vault (or other secure locations), and you
+must have the "storage" empire privilege to use this ability at all.
+
+See also: VAULT
 #
 "SUMMON SWIFT"
 
@@ -397,6 +438,7 @@ Summon Swift (High Sorcery ability)
 
 Command:  summon swift <type>
 Cooldown:  1 minute
+Cost:  10 mana
 
 This ability lets you summon a swift mount to your side. These unique mounts
 can be sold to players who aren't sorcerers, or kept for one's self. The swift
@@ -408,8 +450,6 @@ Types of swift mounts:
   serpent - a long, gigantic snake (requires 51)
   liger - a massive striped cat (requires 76)
   bear - a huge bear with golden fur (requires 76)
-
-See also: SUMMON
 #
 SUNSHOCK "SUN SHOCK"
 
@@ -417,6 +457,8 @@ Sunshock (High Sorcery ability)
 
 Usage:  sunshock [victim]
 Cooldown:  9 seconds
+Cost:  25 mana
+Debuff type:  High Sorcery
 
 Sunshock blasts your target with the pure light of the sun. This deals a small
 amount of damage (scaled by your level in High Sorcery), and causes a very
@@ -426,16 +468,19 @@ Sunshock does 2x damage to vampires.
 
 If you are in combat and specify no target, Sunshock hits your current
 opponent.
+
+See also: BLIND
 #
 VIGOR
 
 Vigor (High Sorcery ability)
 
 Usage:  vigor [target]
+Cost:  15 / 25 / 40 mana
 
 Your target receives a quick boost of movement points, at the cost of move
 regeneration. The strength of this spell is based upon the caster's intell-
-igence.
+igence and High Sorcery level.
 
 The vigor bonus is doubled if the target is not in combat.
 

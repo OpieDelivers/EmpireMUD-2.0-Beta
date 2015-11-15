@@ -6,7 +6,7 @@ Mob Kill Adventure Completion~
 ~
 #10001
 Mob Must Fight~
-0 q 100
+0 s 100
 ~
 %send% %actor% You can't leave because of %self.name%.
 return 0
@@ -642,7 +642,7 @@ end
 eval charge %%actor.add_resources(10036,-%cost%)%%
 nop %charge%
 %load% obj %vnum% %actor% inv %actor.level%
-%send% %actor% You buy a %named% for %cost% skystones.
+%send% %actor% You buy %named% for %cost% skystones.
 %echoaround% %actor% %actor.name% buys a %named%.
 ~
 #10038
@@ -857,7 +857,7 @@ eval ch %room.people%
 while %ch%
   if %ch.varexists(pixy_choice)%
     if %ch.pixy_choice% == %winner%
-      eval amt %ch.pixy_wager% * 4
+      eval amt %ch.pixy_wager% * 3
       %send% %ch% Your pixy won! You earn %amt% coins!
       %echoaround% %ch% %ch.name% has won %ch.hisher% bet!
       eval adjust %%ch.give_coins(%amt%)%%
@@ -928,7 +928,7 @@ if !%actor.affect(enervate)%
   enervate
 else
   %send% %actor% %self.name% marks you with a piece of chalk. It burns!
-  %echoaround% %actor% %self.name% marks %actor.name with a piece of chalk. It looks like it burns!
+  %echoaround% %actor% %self.name% marks %actor.name% with a piece of chalk. It looks like it burns!
   %dot% %actor% 50 20 magical
   %damage% %actor% 50 magical
 end
@@ -1077,7 +1077,7 @@ switch %msg_pos%
     %echo% %self.name% sits in her chair.
   break
   case 2
-    %echo% %self.name% stands up, puts a book in a glase case, and locks it.
+    %echo% %self.name% stands up, puts a book in a glass case, and locks it.
   break
   case 3
     say I have a lithe, form-fitting backpack for sale -- just 5 greater skystones (type 'buy').
@@ -1369,7 +1369,7 @@ switch %random.3%
     dg_affect %self% TO-HIT 1 60
   break
   case 3
-    dg_affect %self% SOAK 1 60
+    dg_affect %self% RESIST-PHYSICAL 1 60
   break
 done
 ~

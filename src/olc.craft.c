@@ -1,5 +1,5 @@
 /* ************************************************************************
-*   File: olc.craft.c                                     EmpireMUD 2.0b1 *
+*   File: olc.craft.c                                     EmpireMUD 2.0b3 *
 *  Usage: OLC for craft recipes                                           *
 *                                                                         *
 *  EmpireMUD code base by Paul Clarke, (C) 2000-2015                      *
@@ -67,10 +67,6 @@ bool audit_craft(craft_data *craft, char_data *ch) {
 		olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft requires no resources");
 		problem = TRUE;
 	}
-	if (!IS_SET(GET_CRAFT_FLAGS(craft), CRAFT_SOUP) && (GET_CRAFT_OBJECT(craft) == NOTHING || !obj_proto(GET_CRAFT_OBJECT(craft))) && (GET_CRAFT_BUILD_TYPE(craft) == NOTHING || !building_proto(GET_CRAFT_BUILD_TYPE(craft)))) {
-		olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft makes nothing");
-		problem = TRUE;
-	}
 	if (!str_cmp(GET_CRAFT_NAME(craft), "unnamed recipe")) {
 		olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft not named");
 		problem = TRUE;
@@ -79,21 +75,45 @@ bool audit_craft(craft_data *craft, char_data *ch) {
 		olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft type not set");
 		problem = TRUE;
 	}
-	if (GET_CRAFT_TYPE(craft) != CRAFT_TYPE_BUILD && GET_CRAFT_OBJECT(craft) != NOTHING && GET_CRAFT_OBJECT(craft) != GET_CRAFT_VNUM(craft)) {
-		olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft creates item with different vnum");
-		problem = TRUE;
+	
+	// different types of crafts
+	if (GET_CRAFT_TYPE(craft) == CRAFT_TYPE_BUILD) {	// buildings only
+		if (GET_CRAFT_BUILD_TYPE(craft) == NOTHING || !building_proto(GET_CRAFT_BUILD_TYPE(craft))) {
+			olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft makes nothing");
+			problem = TRUE;
+		}
+		if (GET_CRAFT_BUILD_TYPE(craft) != NOTHING && GET_CRAFT_BUILD_TYPE(craft) != GET_CRAFT_VNUM(craft)) {
+			olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft creates building with different vnum");
+			problem = TRUE;
+		}
 	}
-	if (GET_CRAFT_TYPE(craft) == CRAFT_TYPE_BUILD && GET_CRAFT_BUILD_TYPE(craft) != NOTHING && GET_CRAFT_BUILD_TYPE(craft) != GET_CRAFT_VNUM(craft)) {
-		olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft creates building with different vnum");
-		problem = TRUE;
+	else if (CRAFT_FLAGGED(craft, CRAFT_SOUP)) {	// soups only
+		if (GET_CRAFT_OBJECT(craft) < 0 || GET_CRAFT_OBJECT(craft) > NUM_LIQUIDS) {
+			olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Invalid liquid type on soup recipe");
+			problem = TRUE;
+		}
 	}
-	if (GET_CRAFT_QUANTITY(craft) == 0 && GET_CRAFT_TYPE(craft) != CRAFT_TYPE_BUILD) {
-		olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft creates 0 quantity");
-		problem = TRUE;
+	else {	// normal craft (neither building nor soup)
+		if (GET_CRAFT_OBJECT(craft) == NOTHING || !obj_proto(GET_CRAFT_OBJECT(craft))) {
+			olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft makes nothing");
+			problem = TRUE;
+		}
+		if (GET_CRAFT_OBJECT(craft) != NOTHING && GET_CRAFT_OBJECT(craft) != GET_CRAFT_VNUM(craft)) {
+			olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft creates item with different vnum");
+			problem = TRUE;
+		}
 	}
-	if (GET_CRAFT_TIME(craft) == 0 && GET_CRAFT_TYPE(craft) != CRAFT_TYPE_BUILD) {
-		olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft requires 0 time");
-		problem = TRUE;
+	
+	// anything not a building
+	if (GET_CRAFT_TYPE(craft) != CRAFT_TYPE_BUILD) {
+		if (GET_CRAFT_QUANTITY(craft) == 0) {
+			olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft creates 0 quantity");
+			problem = TRUE;
+		}
+		if (GET_CRAFT_TIME(craft) == 0) {
+			olc_audit_msg(ch, GET_CRAFT_VNUM(craft), "Craft requires 0 time");
+			problem = TRUE;
+		}
 	}
 		
 	return problem;
@@ -127,6 +147,27 @@ craft_data *create_craft_table_entry(craft_vnum vnum) {
 	save_library_file_for_vnum(DB_BOOT_CRAFT, vnum);
 
 	return craft;
+}
+
+
+/**
+* For the .list command.
+*
+* @param craft_data *craft The thing to list.
+* @param bool detail If TRUE, provide additional details
+* @return char* The line to show (without a CRLF).
+*/
+char *list_one_craft(craft_data *craft, bool detail) {
+	static char output[MAX_STRING_LENGTH];
+	
+	if (detail) {
+		snprintf(output, sizeof(output), "[%5d] %s", GET_CRAFT_VNUM(craft), GET_CRAFT_NAME(craft));
+	}
+	else {
+		snprintf(output, sizeof(output), "[%5d] %s", GET_CRAFT_VNUM(craft), GET_CRAFT_NAME(craft));
+	}
+	
+	return output;
 }
 
 
@@ -390,9 +431,11 @@ void olc_show_craft(char_data *ch) {
 		}
 	}
 	sprintf(buf + strlen(buf), "<&yability&0> %s\r\n", buf1);
+	
+	sprintf(buf + strlen(buf), "<&ylevelrequired&0> %d\r\n", GET_CRAFT_MIN_LEVEL(craft));
 
 	if (GET_CRAFT_TYPE(craft) != CRAFT_TYPE_BUILD) {
-		seconds = (GET_CRAFT_TIME(craft) * SECS_PER_REAL_UPDATE);
+		seconds = (GET_CRAFT_TIME(craft) * ACTION_CYCLE_TIME);
 		sprintf(buf + strlen(buf), "<&ytime&0> %d action tick%s (%d:%02d)\r\n", GET_CRAFT_TIME(craft), (GET_CRAFT_TIME(craft) != 1 ? "s" : ""), seconds / 60, seconds % 60);
 	}
 
@@ -555,6 +598,12 @@ OLC_MODULE(cedit_flags) {
 }
 
 
+OLC_MODULE(cedit_levelrequired) {
+	craft_data *craft = GET_OLC_CRAFT(ch->desc);
+	GET_CRAFT_MIN_LEVEL(craft) = olc_process_number(ch, argument, "minimum level", "levelrequired", 0, 1000, GET_CRAFT_MIN_LEVEL(craft));
+}
+
+
 OLC_MODULE(cedit_liquid) {
 	craft_data *craft = GET_OLC_CRAFT(ch->desc);
 	
@@ -616,14 +665,15 @@ OLC_MODULE(cedit_requiresobject) {
 
 OLC_MODULE(cedit_resource) {
 	craft_data *craft = GET_OLC_CRAFT(ch->desc);
-	char arg1[MAX_INPUT_LENGTH], arg2[MAX_INPUT_LENGTH], arg3[MAX_INPUT_LENGTH];
-	int num, iter;
+	char arg1[MAX_INPUT_LENGTH], arg2[MAX_INPUT_LENGTH], arg3[MAX_INPUT_LENGTH], arg4[MAX_INPUT_LENGTH];
+	int num, iter, pos;
 	obj_vnum vnum;
 	bool found;
 	
 	// arg1 arg2 arg3
 	half_chop(argument, arg1, buf);
-	half_chop(buf, arg2, arg3);
+	half_chop(buf, arg2, buf1);
+	half_chop(buf1, arg3, arg4);
 	
 	if (is_abbrev(arg1, "remove")) {
 		if (!*arg2) {
@@ -758,8 +808,54 @@ OLC_MODULE(cedit_resource) {
 			}
 		}
 	}
+	else if (is_abbrev(arg1, "change")) {
+		if (!*arg2 || !*arg3 || !*arg4 || !isdigit(*arg2) || !isdigit(*arg4)) {
+			msg_to_char(ch, "Usage: resource change <number> <quantity | vnum> <value>\r\n");
+			return;
+		}
+		
+		vnum = atoi(arg4);	// may be used as quantity instead
+		
+		// verify valid pos
+		num = atoi(arg2);
+		pos = -1;
+		for (iter = 0; iter < MAX_RESOURCES_REQUIRED && GET_CRAFT_RESOURCES(craft)[iter].vnum != NOTHING; ++iter) {
+			// num-1 because it shows as 1-based
+			if (iter == (num - 1)) {
+				pos = iter;
+				break;
+			}
+		}
+		
+		if (pos == -1) {
+			msg_to_char(ch, "Invalid resource number.\r\n");
+		}
+		else if (is_abbrev(arg3, "quantity")) {
+			if (vnum < 1 || vnum > 1000) {
+				msg_to_char(ch, "You must specify a quantity between 1 and 1000.\r\n");
+			}
+			else {
+				GET_CRAFT_RESOURCES(craft)[pos].amount = vnum;
+				// TODO
+				msg_to_char(ch, "You change resource %d (%s)'s quantity to %d.\r\n", num, get_obj_name_by_proto(GET_CRAFT_RESOURCES(craft)[pos].vnum), vnum);
+			}
+		}
+		else if (is_abbrev(arg3, "vnum")) {
+			if (!obj_proto(vnum)) {
+				msg_to_char(ch, "There is no such object vnum %d.\r\n", vnum);
+			}
+			else {
+				GET_CRAFT_RESOURCES(craft)[pos].vnum = vnum;
+				msg_to_char(ch, "You change resource %d's vnum to [%d] %s.\r\n", num, vnum, get_obj_name_by_proto(vnum));
+			}
+		}
+		else {
+			msg_to_char(ch, "Usage: resource change <number> <quantity|vnum> <value>\r\n");
+		}
+	}
 	else {
 		msg_to_char(ch, "Usage: resource add <quantity> <vnum>\r\n");
+		msg_to_char(ch, "Usage: resource change <number> <quantity | vnum> <value>\r\n");
 		msg_to_char(ch, "Usage: resource remove <number | all>\r\n");
 		msg_to_char(ch, "Usage: resource move <number> <up | down>\r\n");
 	}

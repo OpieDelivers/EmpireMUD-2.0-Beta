@@ -1,5 +1,5 @@
 /* ************************************************************************
-*   File: vnums.h                                         EmpireMUD 2.0b1 *
+*   File: vnums.h                                         EmpireMUD 2.0b3 *
 *  Usage: stores commonly-used virtual numbers                            *
 *                                                                         *
 *  EmpireMUD code base by Paul Clarke, (C) 2000-2015                      *
@@ -22,6 +22,7 @@
 #define BUILDING_RUINS_CLOSED  5007	// custom icons and db.world.c
 #define BUILDING_TUNNEL  5008  // building.c
 #define BUILDING_CITY_CENTER  5009
+#define BUILDING_RUINS_FLOODED  5010	// water ruins
 
 #define BUILDING_FENCE  5112
 #define BUILDING_GATE  5113
@@ -70,6 +71,7 @@
 #define RTYPE_B_ONDECK  5501	// boat
 #define RTYPE_B_STORAGE  5502	// boat
 #define RTYPE_B_BELOWDECK  5503	// boat
+#define RTYPE_SHIP_HOLDING_PEN  5509	// for the shipping system's storage room
 #define RTYPE_STEALTH_HIDEOUT  5510
 #define RTYPE_SORCERER_TOWER  5511
 
@@ -123,16 +125,6 @@
 #define o_FLINT_SET  183
 #define o_SPEARHEAD  186
 
-// pickpocket items
-#define o_MIRROR_SILVER  806
-#define o_CANDLE  851
-#define o_RING_SILVER  2120
-#define o_APPLE  3001
-#define o_NUTS  3013
-#define o_BERRIES  3015
-#define o_DATES  3016
-#define o_FIG  3017
-
 // brewing items
 #define o_APPLES  3002
 #define o_PEACHES  3004
@@ -161,17 +153,14 @@
 
 // core objects
 #define o_CORPSE  1000
-#define o_BOOK  1001
 #define o_HOME_CHEST  1010
 
 // Skill tree items
 #define o_PORTAL  1100  // could probably safely generate a NOTHING item
-#define o_BLOODSWORD_LOW  1101
-#define o_BLOODSWORD_MEDIUM  1102
-#define o_BLOODSWORD_HIGH  1103
-#define o_BLOODSWORD_LEGENDARY  1104
+#define o_BLOODSWORD  1101
 #define o_FIREBALL  1105
 #define o_IMPERIUM_SPIKE  1114
+#define o_NEXUS_CRYSTAL  1115
 
 // herbs
 #define o_WHITEGRASS  1200
@@ -191,13 +180,11 @@
 #define o_WORN_STATUETTE  1305
 #define o_NAILS  1306
 
-// skins and cloths
+// skins
 #define o_SMALL_SKIN  1350
 #define o_LARGE_SKIN  1351
 #define o_SMALL_LEATHER  1356
 #define o_LARGE_LEATHER  1357
-#define o_WOOL  1358
-#define o_CLOTH  1359
 
 // newbie gear
 #define o_STAFF  1107
@@ -250,6 +237,18 @@
 #define FAMILIAR_SABERTOOTH  501
 #define FAMILIAR_SPHINX  502
 #define FAMILIAR_GRIFFIN  503
+#define FAMILIAR_DIRE_WOLF  504
+#define FAMILIAR_MOON_RABBIT  505
+#define FAMILIAR_GIANT_TORTOISE  506
+#define FAMILIAR_SPIRIT_WOLF  507
+#define FAMILIAR_MANTICORE  508
+#define FAMILIAR_PHOENIX  509
+#define FAMILIAR_SCORPION_SHADOW  510
+#define FAMILIAR_OWL_SHADOW  511
+#define FAMILIAR_BASILISK  512
+#define FAMILIAR_SALAMANDER  513
+#define FAMILIAR_SKELETAL_HULK  514
+#define FAMILIAR_BANSHEE  515
 
 
 // empire mobs
@@ -280,3 +279,5 @@
 #define SHEARER  268
 #define COIN_MAKER  269
 #define DOCKWORKER  270
+#define APPRENTICE_EXARCH  271
+#define MILL_WORKER  272

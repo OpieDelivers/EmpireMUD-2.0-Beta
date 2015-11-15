@@ -1,5 +1,5 @@
 /* ************************************************************************
-*   File: act.movement.c                                  EmpireMUD 2.0b1 *
+*   File: act.movement.c                                  EmpireMUD 2.0b3 *
 *  Usage: movement commands, door handling, & sleep/rest/etc state        *
 *                                                                         *
 *  EmpireMUD code base by Paul Clarke, (C) 2000-2015                      *
@@ -9,6 +9,8 @@
 *  CircleMUD (C) 1993, 94 by the Trustees of the Johns Hopkins University *
 *  CircleMUD is based on DikuMUD, Copyright (C) 1990, 1991.               *
 ************************************************************************ */
+
+#include <math.h>
 
 #include "conf.h"
 #include "sysdep.h"
@@ -44,7 +46,7 @@ extern const char *from_dir[];
 #define MOVE_EARTHMELD	4
 #define MOVE_SWIM		5	// swim skill
 
-#define WATER_SECT(room)		(ROOM_SECT_FLAGGED((room), SECTF_FRESH_WATER | SECTF_OCEAN) || RMT_FLAGGED((room), RMT_NEED_BOAT) || (IS_WATER_BUILDING(room) && !IS_COMPLETE(room)))
+#define WATER_SECT(room)		(ROOM_SECT_FLAGGED((room), SECTF_FRESH_WATER | SECTF_OCEAN) || ROOM_BLD_FLAGGED((room), BLD_NEED_BOAT) || RMT_FLAGGED((room), RMT_NEED_BOAT) || (IS_WATER_BUILDING(room) && !IS_COMPLETE(room) && SECT_FLAGGED(ROOM_ORIGINAL_SECT(room), SECTF_FRESH_WATER | SECTF_OCEAN)))
 #define DEEP_WATER_SECT(room)	(ROOM_SECT_FLAGGED((room), SECTF_OCEAN))
 
 
@@ -111,7 +113,7 @@ void add_tracks(char_data *ch, room_data *room, byte dir) {
 */
 bool can_enter_room(char_data *ch, room_data *room) {
 	extern bool can_enter_instance(char_data *ch, struct instance_data *inst);
-	extern struct instance_data *find_instance_by_room(room_data *room);
+	extern struct instance_data *find_instance_by_room(room_data *room, bool check_homeroom);
 	
 	struct instance_data *inst;
 	
@@ -121,9 +123,9 @@ bool can_enter_room(char_data *ch, room_data *room) {
 	}
 	
 	// player limit
-	if (IS_ADVENTURE_ROOM(room) && (inst = find_instance_by_room(room))) {
+	if (IS_ADVENTURE_ROOM(room) && (inst = find_instance_by_room(room, FALSE))) {
 		// only if not already in there
-		if (!IS_ADVENTURE_ROOM(IN_ROOM(ch)) || find_instance_by_room(IN_ROOM(ch)) != inst) {
+		if (!IS_ADVENTURE_ROOM(IN_ROOM(ch)) || find_instance_by_room(IN_ROOM(ch), FALSE) != inst) {
 			if (!can_enter_instance(ch, inst)) {
 				return FALSE;
 			}
@@ -314,6 +316,11 @@ int can_move(char_data *ch, int dir, room_data *to_room, int need_specials_check
 		return 0;
 	}
 	
+	if (MOB_FLAGGED(ch, MOB_AQUATIC) && !WATER_SECT(to_room) && !EFFECTIVELY_FLYING(ch)) {
+		msg_to_char(ch, "You can't go on land!\r\n");
+		return 0;
+	}
+	
 	if (ROOM_SECT_FLAGGED(IN_ROOM(ch), SECTF_ROUGH) && ROOM_SECT_FLAGGED(to_room, SECTF_ROUGH) && (!IS_NPC(ch) || !MOB_FLAGGED(ch, MOB_MOUNTAINWALK)) && !HAS_ABILITY(ch, ABIL_MOUNTAIN_CLIMBING) && !EFFECTIVELY_FLYING(ch)) {
 		msg_to_char(ch, "You must buy the Mountain Climbing ability to cross such rough terrain.\r\n");
 		return 0;
@@ -432,13 +439,21 @@ void perform_transport(char_data *ch, room_data *to_room) {
  //////////////////////////////////////////////////////////////////////////////
 //// MOVE SYSTEM /////////////////////////////////////////////////////////////
 
-// process sending ch through portal
-void char_through_portal(char_data *ch, obj_data *portal) {
+/**
+* process sending ch through portal
+*
+* @param char_data *ch The person to send through.
+* @param obj_data *portal The portal object.
+* @param bool following TRUE only if this person followed someone else through.
+*/
+void char_through_portal(char_data *ch, obj_data *portal, bool following) {
+	void trigger_distrust_from_stealth(char_data *ch, empire_data *emp);
+	
 	obj_data *objiter, *use_portal;
 	struct follow_type *fol, *next_fol;
 	room_data *to_room = real_room(GET_PORTAL_TARGET_VNUM(portal));
 	room_data *was_in = IN_ROOM(ch);
-	bool found;
+	bool found, junk;
 	
 	// safety
 	if (!to_room) {
@@ -472,6 +487,25 @@ void char_through_portal(char_data *ch, obj_data *portal) {
 
 	act("$n appears from $p!", TRUE, ch, use_portal, 0, TO_ROOM);
 	look_at_room(ch);
+	command_lag(ch, WAIT_MOVEMENT);
+	
+	// portal sickness
+	if (!IS_NPC(ch) && !IS_IMMORTAL(ch) && GET_OBJ_VNUM(portal) == o_PORTAL) {
+		if (get_cooldown_time(ch, COOLDOWN_PORTAL_SICKNESS) > 0) {
+			if (is_in_city_for_empire(was_in, ROOM_OWNER(was_in), TRUE, &junk) && is_in_city_for_empire(to_room, ROOM_OWNER(to_room), TRUE, &junk)) {
+				add_cooldown(ch, COOLDOWN_PORTAL_SICKNESS, 2 * SECS_PER_REAL_MIN);
+			}
+			else if (HAS_ABILITY(ch, ABIL_PORTAL_MAGIC)) {
+				add_cooldown(ch, COOLDOWN_PORTAL_SICKNESS, 4 * SECS_PER_REAL_MIN);
+			}
+			else {
+				add_cooldown(ch, COOLDOWN_PORTAL_SICKNESS, 5 * SECS_PER_REAL_MIN);
+			}
+		}
+		else {
+			add_cooldown(ch, COOLDOWN_PORTAL_SICKNESS, SECS_PER_REAL_MIN);
+		}
+	}
 	
 	enter_wtrigger(IN_ROOM(ch), ch, NO_DIR);
 	entry_memory_mtrigger(ch);
@@ -482,9 +516,19 @@ void char_through_portal(char_data *ch, obj_data *portal) {
 	for (fol = ch->followers; fol; fol = next_fol) {
 		next_fol = fol->next;
 		if ((IN_ROOM(fol->follower) == was_in) && (GET_POS(fol->follower) >= POS_STANDING) && can_enter_room(fol->follower, to_room)) {
-			act("You follow $N.\r\n", FALSE, fol->follower, 0, ch, TO_CHAR);
-			char_through_portal(fol->follower, portal);
+			if (!IS_IMMORTAL(fol->follower) && GET_OBJ_VNUM(portal) == o_PORTAL && get_cooldown_time(fol->follower, COOLDOWN_PORTAL_SICKNESS) > SECS_PER_REAL_MIN) {
+				msg_to_char(ch, "You can't enter a portal until your portal sickness cooldown is under one minute.\r\n");
+			}
+			else {
+				act("You follow $N.\r\n", FALSE, fol->follower, 0, ch, TO_CHAR);
+				char_through_portal(fol->follower, portal, TRUE);
+			}
 		}
+	}
+	
+	// trigger distrust?
+	if (!following && ROOM_OWNER(was_in) && !IS_IMMORTAL(ch) && !IS_NPC(ch) && !can_use_room(ch, was_in, GUESTS_ALLOWED)) {
+		trigger_distrust_from_stealth(ch, ROOM_OWNER(was_in));
 	}
 }
 
@@ -497,6 +541,7 @@ void char_through_portal(char_data *ch, obj_data *portal) {
 */
 bool do_simple_move(char_data *ch, int dir, room_data *to_room, int need_specials_check, byte mode) {
 	void cancel_action(char_data *ch);
+	extern const struct action_data_struct action_data[];
 	extern const char *mob_move_types[];
 	
 	char lbuf[MAX_STRING_LENGTH];
@@ -508,32 +553,43 @@ bool do_simple_move(char_data *ch, int dir, room_data *to_room, int need_special
 
 	/* First things first: Are we pulling a cart? */
 	if ((cart = GET_PULLING(ch))) {
-		mode = MOVE_CART;
-		if (ch == GET_PULLED_BY(cart, 0))
-			animal = GET_PULLED_BY(cart, 1);
-		else
-			animal = GET_PULLED_BY(cart, 0);
-		if (animal && IN_ROOM(animal) != IN_ROOM(ch))
-			animal = NULL;
+		if (IN_ROOM(cart) != IN_ROOM(ch)) {
+			// don't bother
+			cart = NULL;
+		}
+		else {
+			mode = MOVE_CART;
+			if (ch == GET_PULLED_BY(cart, 0))
+				animal = GET_PULLED_BY(cart, 1);
+			else
+				animal = GET_PULLED_BY(cart, 0);
+			if (animal && IN_ROOM(animal) != IN_ROOM(ch))
+				animal = NULL;
 
-		/* Make sure there's enough work animals */
-		if (GET_CART_ANIMALS_REQUIRED(cart) > 1) {
-			if (!animal) {
-				act("You need two animals to move $p.", FALSE, ch, cart, 0, TO_CHAR);
-				return FALSE;
-			}
+			/* Make sure there's enough work animals */
+			if (GET_CART_ANIMALS_REQUIRED(cart) > 1) {
+				if (!animal) {
+					act("You need two animals to move $p.", FALSE, ch, cart, 0, TO_CHAR);
+					return FALSE;
+				}
 		
-			if (animal && MOB_FLAGGED(animal, MOB_TIED)) {
-				act("The other animal pulling $p is tied up.", FALSE, ch, cart, 0, TO_CHAR);
-				return FALSE;
-			}
-			if (animal && is_fighting(animal)) {
-				act("The other animal pulling $p is fighting!", FALSE, ch, cart, 0, TO_CHAR);
-				return FALSE;
+				if (animal && MOB_FLAGGED(animal, MOB_TIED)) {
+					act("The other animal pulling $p is tied up.", FALSE, ch, cart, 0, TO_CHAR);
+					return FALSE;
+				}
+				if (animal && is_fighting(animal)) {
+					act("The other animal pulling $p is fighting!", FALSE, ch, cart, 0, TO_CHAR);
+					return FALSE;
+				}
 			}
 		}
 	}
-
+	
+	if (!IS_IMMORTAL(ch) && !IS_NPC(ch) && IS_CARRYING_N(ch) > CAN_CARRY_N(ch)) {
+		msg_to_char(ch, "You are overburdened and cannot move.\r\n");
+		return FALSE;
+	}
+	
 	if (IS_INJURED(ch, INJ_TIED)) {
 		msg_to_char(ch, "You can't seem to move!\r\n");
 		return FALSE;
@@ -630,7 +686,7 @@ bool do_simple_move(char_data *ch, int dir, room_data *to_room, int need_special
 	/* move points needed is avg. move loss for src and destination sect type */
 	need_movement = move_cost(ch, IN_ROOM(ch), to_room, dir, mode);
 
-	if (GET_MOVE(ch) < need_movement && !IS_NPC(ch)) {
+	if (GET_MOVE(ch) < need_movement && !IS_IMMORTAL(ch) && !IS_NPC(ch)) {
 		if (need_specials_check && ch->master)
 			send_to_char("You are too exhausted to follow.\r\n", ch);
 		else
@@ -659,23 +715,23 @@ bool do_simple_move(char_data *ch, int dir, room_data *to_room, int need_special
 	}
 
 	/* Now we know we're allowed to go into the room. */
-	if (GET_ACCESS_LEVEL(ch) < LVL_GOD && !IS_NPC(ch))
+	if (!IS_IMMORTAL(ch) && !IS_NPC(ch))
 		GET_MOVE(ch) -= need_movement;
 
 	REMOVE_BIT(AFF_FLAGS(ch), AFF_HIDE);
 	
 	// determine real move type
 	move_type = IS_NPC(ch) ? MOB_MOVE_TYPE(ch) : MOB_MOVE_WALK;
-	if (AFF_FLAGGED(ch, AFF_FLY)) {
+	if (AFF_FLAGGED(ch, AFF_FLY) && !IS_NPC(ch)) {
 		move_type = MOB_MOVE_FLY;
 	}
 	else if (IS_RIDING(ch)) {
 		move_type = MOB_MOVE_RIDE;
 	}
-	else if (move_type == MOB_MOVE_WALK && ROOM_SECT_FLAGGED(IN_ROOM(ch), SECTF_FRESH_WATER | SECTF_OCEAN)) {
+	else if (move_type == MOB_MOVE_WALK && ROOM_SECT_FLAGGED(IN_ROOM(ch), SECTF_FRESH_WATER | SECTF_OCEAN) && move_type != MOB_MOVE_FLY) {
 		move_type = MOB_MOVE_SWIM;
 	}
-	else if (move_type == MOB_MOVE_WALK && ROOM_SECT_FLAGGED(IN_ROOM(ch), SECTF_ROUGH)) {
+	else if (move_type == MOB_MOVE_WALK && ROOM_SECT_FLAGGED(IN_ROOM(ch), SECTF_ROUGH) && move_type != MOB_MOVE_FLY) {
 		move_type = MOB_MOVE_CLIMB;
 	}
 	// tweak for people in boats
@@ -708,19 +764,22 @@ bool do_simple_move(char_data *ch, int dir, room_data *to_room, int need_special
 		}
 		if (*buf2 && (!ROOM_AFF_FLAGGED(IN_ROOM(ch), ROOM_AFF_SILENT) || number(0, 4))) {
 			for (vict = ROOM_PEOPLE(IN_ROOM(ch)); vict; vict = vict->next_in_room) {
-				if (vict != ch && vict->desc) {
-					// adjust direction
-					if (strstr(buf2, "%s") != NULL) {
-						sprintf(lbuf, buf2, dirs[get_direction_for_char(vict, dir)]);
-					}
-					else {
-						strcpy(lbuf, buf2);
-					}
-
-					if (CAN_SEE(vict, ch)) {
-						act(lbuf, TRUE, ch, cart, vict, TO_VICT);
-					}
+				if (vict == ch || !vict->desc) {
+					continue;
 				}
+				if (!CAN_SEE(vict, ch) || !WIZHIDE_OK(vict, ch)) {
+					continue;
+				}
+
+				// adjust direction
+				if (strstr(buf2, "%s") != NULL) {
+					sprintf(lbuf, buf2, dirs[get_direction_for_char(vict, dir)]);
+				}
+				else {
+					strcpy(lbuf, buf2);
+				}
+				
+				act(lbuf, TRUE, ch, cart, vict, TO_VICT);
 			}
 		}
 	}
@@ -744,22 +803,11 @@ bool do_simple_move(char_data *ch, int dir, room_data *to_room, int need_special
 	}
 
 	// cancel some actions on movement
-	if (!IS_NPC(ch) && GET_ACTION(ch) != ACT_NONE && GET_ACTION_ROOM(ch) != GET_ROOM_VNUM(IN_ROOM(ch)) && GET_ACTION_ROOM(ch) != NOWHERE) {
+	if (!IS_NPC(ch) && GET_ACTION(ch) != ACT_NONE && !IS_SET(action_data[GET_ACTION(ch)].flags, ACTF_ANYWHERE) && GET_ACTION_ROOM(ch) != GET_ROOM_VNUM(IN_ROOM(ch)) && GET_ACTION_ROOM(ch) != NOWHERE) {
 		cancel_action(ch);
 	}
 	
-	// wait if outdoors, not riding, not on road
-	if (AFF_FLAGGED(ch, AFF_SLOW)) {
-		WAIT_STATE(ch, 1 RL_SEC);
-	}
-	else if (!IS_RIDING(ch) && IS_OUTDOORS(ch) && !IS_ROAD(IN_ROOM(ch))) {
-		if (HAS_BONUS_TRAIT(ch, BONUS_FASTER)) {
-			WAIT_STATE(ch, (1 RL_SEC) / 4);
-		}
-		else {
-			WAIT_STATE(ch, (1 RL_SEC) / 2);
-		}
-	}
+	command_lag(ch, WAIT_MOVEMENT);
 
 	if (animal) {
 		char_from_room(animal);
@@ -795,19 +843,22 @@ bool do_simple_move(char_data *ch, int dir, room_data *to_room, int need_special
 				sprintf(buf2, "$n %s up from %%s.", mob_move_types[move_type]);
 
 				for (vict = ROOM_PEOPLE(IN_ROOM(ch)); vict; vict = vict->next_in_room) {
-					if (vict != ch && vict->desc) {
-						// adjust direction
-						if (strstr(buf2, "%s")) {
-							sprintf(lbuf, buf2, from_dir[get_direction_for_char(vict, dir)]);
-						}
-						else {
-							strcpy(lbuf, buf);
-						}
-
-						if (CAN_SEE(vict, ch)) {
-							act(lbuf, TRUE, ch, cart, vict, TO_VICT);
-						}
+					if (vict == ch || !vict->desc) {
+						continue;
 					}
+					if (!CAN_SEE(vict, ch) || !WIZHIDE_OK(vict, ch)) {
+						continue;
+					}
+					
+					// adjust direction
+					if (strstr(buf2, "%s")) {
+						sprintf(lbuf, buf2, from_dir[get_direction_for_char(vict, dir)]);
+					}
+					else {
+						strcpy(lbuf, buf);
+					}
+
+					act(lbuf, TRUE, ch, cart, vict, TO_VICT);
 				}
 				break;
 			}
@@ -943,7 +994,7 @@ ACMD(do_avoid) {
 		act("$n manages to avoid $N, who was following $m.", TRUE, ch, NULL, vict, TO_NOTVICT);
 		
 		stop_follower(vict);
-		WAIT_STATE(vict, 4 RL_SEC);
+		GET_WAIT_STATE(vict) = 4 RL_SEC;
 	}
 }
 
@@ -987,6 +1038,11 @@ ACMD(do_circle) {
 	
 	if (ROOM_BLD_FLAGGED(IN_ROOM(ch), BLD_BARRIER) && IS_COMPLETE(IN_ROOM(ch))) {
 		msg_to_char(ch, "You can't circle from here.\r\n");
+		return;
+	}
+	
+	if (!IS_IMMORTAL(ch) && !IS_NPC(ch) && IS_CARRYING_N(ch) > CAN_CARRY_N(ch)) {
+		msg_to_char(ch, "You are overburdened and cannot move.\r\n");
 		return;
 	}
 	
@@ -1093,7 +1149,7 @@ ACMD(do_circle) {
 	// check costs
 	need_movement = move_cost(ch, IN_ROOM(ch), found_room, dir, MOVE_NORMAL);
 	
-	if (GET_MOVE(ch) < need_movement) {
+	if (GET_MOVE(ch) < need_movement && !IS_IMMORTAL(ch) && !IS_NPC(ch)) {
 		msg_to_char(ch, "You're too tired to circle that way.\r\n");
 		return;
 	}
@@ -1110,7 +1166,9 @@ ACMD(do_circle) {
 	}
 
 	// work
-	GET_MOVE(ch) -= need_movement;
+	if (!IS_IMMORTAL(ch) && !IS_NPC(ch)) {
+		GET_MOVE(ch) -= need_movement;
+	}
 	char_from_room(ch);
 	char_to_room(ch, found_room);
 	
@@ -1121,6 +1179,8 @@ ACMD(do_circle) {
 	if (ch->desc) {
 		look_at_room(ch);
 	}
+	
+	command_lag(ch, WAIT_MOVEMENT);
 	
 	// triggers?
 	if (!enter_wtrigger(IN_ROOM(ch), ch, dir) || !greet_mtrigger(ch, dir)) {
@@ -1157,12 +1217,20 @@ ACMD(do_circle) {
 
 // enters a portal
 ACMD(do_enter) {
+	extern bool can_infiltrate(char_data *ch, empire_data *emp);
+	
 	char_data *tmp_char;
 	obj_data *portal;
 	room_data *room;
 	
 	if (AFF_FLAGGED(ch, AFF_ENTANGLED)) {
 		msg_to_char(ch, "You are entangled and can't enter anything.\r\n");
+		return;
+	}
+	
+	if (AFF_FLAGGED(ch, AFF_CHARM) && ch->master && IN_ROOM(ch) == IN_ROOM(ch->master)) {
+		msg_to_char(ch, "The thought of leaving your master makes you weep.\r\n");
+		act("$n bursts into tears.", FALSE, ch, NULL, NULL, TO_ROOM);
 		return;
 	}
 	
@@ -1186,12 +1254,35 @@ ACMD(do_enter) {
 		return;
 	}
 	
+	if (!IS_IMMORTAL(ch) && !IS_NPC(ch) && IS_CARRYING_N(ch) > CAN_CARRY_N(ch)) {
+		msg_to_char(ch, "You are overburdened and cannot move.\r\n");
+		return;
+	}
+	
 	if (!can_enter_room(ch, room)) {
 		msg_to_char(ch, "You can't seem to go there. Perhaps it's full.\r\n");
 		return;
 	}
 	
-	char_through_portal(ch, portal);
+	// portal sickness
+	if (!IS_IMMORTAL(ch) && GET_OBJ_VNUM(portal) == o_PORTAL && get_cooldown_time(ch, COOLDOWN_PORTAL_SICKNESS) > SECS_PER_REAL_MIN) {
+		msg_to_char(ch, "You can't enter a portal until your portal sickness cooldown is under one minute.\r\n");
+		return;
+	}
+	
+	// permissions
+	if (ROOM_OWNER(IN_ROOM(ch)) && !IS_IMMORTAL(ch) && !IS_NPC(ch) && (!can_use_room(ch, IN_ROOM(ch), GUESTS_ALLOWED) || !can_use_room(ch, room, GUESTS_ALLOWED))) {
+		if (!HAS_ABILITY(ch, ABIL_INFILTRATE)) {
+			msg_to_char(ch, "You don't have permission to enter that.\r\n");
+			return;
+		}
+		if (!can_infiltrate(ch, ROOM_OWNER(IN_ROOM(ch)))) {
+			// sends own message
+			return;
+		}
+	}
+	
+	char_through_portal(ch, portal, FALSE);
 }
 
 
@@ -1300,7 +1391,7 @@ ACMD(do_land) {
 		msg_to_char(ch, "You can't seem to land. Perhaps whatever is causing your flight can't be ended.\r\n");
 	}
 	
-	WAIT_STATE(ch, 2 RL_SEC);
+	command_lag(ch, WAIT_OTHER);
 }
 
 
@@ -1344,6 +1435,13 @@ ACMD(do_lead) {
 ACMD(do_move) {
 	extern int get_north_for_char(char_data *ch);
 	extern const int confused_dirs[NUM_SIMPLE_DIRS][2][NUM_OF_DIRS];
+	
+	// this blocks normal moves but not flee
+	if (is_fighting(ch)) {
+		msg_to_char(ch, "You can't move while fighting!\r\n");
+		return;
+	}
+	
 	perform_move(ch, confused_dirs[get_north_for_char(ch)][0][subcmd], FALSE, MOVE_NORMAL);
 }
 
@@ -1352,14 +1450,16 @@ ACMD(do_move) {
 ACMD(do_portal) {
 	void empire_skillup(empire_data *emp, int ability, double amount);
 	extern char *get_room_name(room_data *room, bool color);
-	extern const int universal_wait;
 	
 	bool all_access = (IS_IMMORTAL(ch) || (IS_NPC(ch) && !AFF_FLAGGED(ch, AFF_CHARM)));
 	char arg[MAX_INPUT_LENGTH], buf[MAX_STRING_LENGTH * 2], line[MAX_STRING_LENGTH];
 	room_data *room, *next_room, *target = NULL;
 	obj_data *portal, *end, *obj;
-	int bsize, lsize, count, num;
-	bool all = FALSE;
+	int bsize, lsize, count, num, dist;
+	bool all = FALSE, wait_here = FALSE, wait_there = FALSE, ch_in_city;
+	bool there_in_city;
+	
+	int max_out_of_city_portal = config_get_int("max_out_of_city_portal");
 	
 	argument = any_one_word(argument, arg);
 	
@@ -1381,13 +1481,17 @@ ACMD(do_portal) {
 		bsize = snprintf(buf, sizeof(buf), "Known portals:\r\n");
 		
 		count = 0;
+		ch_in_city = (is_in_city_for_empire(IN_ROOM(ch), ROOM_OWNER(IN_ROOM(ch)), TRUE, &wait_here) || (!ROOM_OWNER(IN_ROOM(ch)) && is_in_city_for_empire(IN_ROOM(ch), GET_LOYALTY(ch), TRUE, &wait_here)));
 		HASH_ITER(world_hh, world_table, room, next_room) {
 			// early exit
 			if (bsize >= sizeof(buf) - 1) {
 				break;
 			}
 			
-			if (ROOM_OWNER(room) && ROOM_BLD_FLAGGED(room, BLD_PORTAL) && IS_COMPLETE(room) && can_use_room(ch, room, all ? GUESTS_ALLOWED : MEMBERS_AND_ALLIES)) {
+			dist = compute_distance(IN_ROOM(ch), room);
+			there_in_city = is_in_city_for_empire(room, ROOM_OWNER(room), TRUE, &wait_there);
+			
+			if (ROOM_OWNER(room) && ROOM_BLD_FLAGGED(room, BLD_PORTAL) && IS_COMPLETE(room) && can_use_room(ch, room, all ? GUESTS_ALLOWED : MEMBERS_AND_ALLIES) && (!all || (dist <= max_out_of_city_portal || (ch_in_city && there_in_city)))) {
 				// only shows owned portals the character can use
 				++count;
 				*line = '\0';
@@ -1405,13 +1509,17 @@ ACMD(do_portal) {
 				
 				lsize += snprintf(line + lsize, sizeof(line) - lsize, "%s (%s%s&0)", get_room_name(room, FALSE), EMPIRE_BANNER(ROOM_OWNER(room)), EMPIRE_ADJECTIVE(ROOM_OWNER(room)));
 				
+				if ((dist > max_out_of_city_portal && (!ch_in_city || !there_in_city)) || (!HAS_ABILITY(ch, ABIL_PORTAL_MASTER) && (!GET_LOYALTY(ch) || !EMPIRE_HAS_TECH(GET_LOYALTY(ch), TECH_MASTER_PORTALS)) && GET_ISLAND_ID(IN_ROOM(ch)) != GET_ISLAND_ID(target))) {
+					lsize += snprintf(line + lsize, sizeof(line) - lsize, " &r(too far)&0");
+				}
+				
 				bsize += snprintf(buf + bsize, sizeof(buf) - bsize, "%s\r\n", line);
 			}
 		}
 		
 		// page it in case it's long
 		page_string(ch->desc, buf, TRUE);
-		WAIT_STATE(ch, universal_wait);
+		command_lag(ch, WAIT_OTHER);
 		return;
 	}
 	
@@ -1466,9 +1574,21 @@ ACMD(do_portal) {
 			return;
 		}
 	}
-
+	
+	// check distance
+	if (!all_access) {
+		if (!is_in_city_for_empire(IN_ROOM(ch), ROOM_OWNER(IN_ROOM(ch)), TRUE, &wait_here) || !is_in_city_for_empire(target, ROOM_OWNER(target), TRUE, &wait_there)) {
+			dist = compute_distance(IN_ROOM(ch), target);
+			
+			if (dist > max_out_of_city_portal) {
+				msg_to_char(ch, "You can't open a portal further away than %d tile%s unless both ends are in a city%s.\r\n", max_out_of_city_portal, PLURAL(max_out_of_city_portal), wait_here ? " (this city was founded too recently)" : (wait_there ? " (that city was founded too recently)" : ""));
+				return;
+			}
+		}
+	}
+	
 	// portal this side
-	portal = read_object(o_PORTAL);
+	portal = read_object(o_PORTAL, TRUE);
 	GET_OBJ_VAL(portal, VAL_PORTAL_TARGET_VNUM) = GET_ROOM_VNUM(target);
 	GET_OBJ_TIMER(portal) = 5;
 	obj_to_room(portal, IN_ROOM(ch));
@@ -1485,7 +1605,7 @@ ACMD(do_portal) {
 	load_otrigger(portal);
 	
 	// portal other side
-	end = read_object(o_PORTAL);
+	end = read_object(o_PORTAL, TRUE);
 	GET_OBJ_VAL(end, VAL_PORTAL_TARGET_VNUM) = GET_ROOM_VNUM(IN_ROOM(ch));
 	GET_OBJ_TIMER(end) = 5;
 	obj_to_room(end, target);
@@ -1499,7 +1619,7 @@ ACMD(do_portal) {
 		empire_skillup(GET_LOYALTY(ch), ABIL_PORTAL_MASTER, 15);
 	}
 	
-	WAIT_STATE(ch, universal_wait);
+	command_lag(ch, WAIT_OTHER);
 }
 
 
@@ -1601,7 +1721,7 @@ ACMD(do_sleep) {
 			char_from_chair(ch);
 		case POS_RESTING:
 			if (IS_RIDING(ch)) {
-				msg_to_char(ch, "You climb down from your mount..\r\n");
+				msg_to_char(ch, "You climb down from your mount.\r\n");
 				perform_dismount(ch);
 			}
 			send_to_char("You lay down and go to sleep.\r\n", ch);
@@ -1761,7 +1881,7 @@ ACMD(do_worm) {
 		gain_ability_exp(ch, ABIL_WORM, 1);
 		
 		// on top of any wait from the move itself
-		WAIT_STATE(ch, 1 RL_SEC);
+		GET_WAIT_STATE(ch) += 1 RL_SEC;
 	}
 }
 
